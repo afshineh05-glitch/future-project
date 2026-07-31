@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
-import 'screens/welcome_screen.dart';
-import 'theme/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+import 'package:future_project/config/supabase_config.dart';
+import 'package:future_project/screens/welcome_screen.dart';
+import 'package:future_project/theme/app_theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    publishableKey: SupabaseConfig.anonKey,
+  );
+
   runApp(const FutureProjectApp());
 }
 

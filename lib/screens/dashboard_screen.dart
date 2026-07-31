@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:future_project/screens/calorie_scanner_screen.dart';
+import 'package:future_project/screens/intelligent_coach_screen.dart';
 import 'package:future_project/screens/journey_screen.dart';
 import 'package:future_project/screens/vision_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
@@ -105,6 +107,24 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(height: 14),
 
           DashboardCard(
+            icon: Icons.psychology_outlined,
+            title: 'Intelligent Coach',
+            subtitle: 'Your daily health guidance',
+            backgroundColor: AppTheme.visionCard,
+            iconColor: AppTheme.primaryGreen,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const IntelligentCoachScreen(),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 18),
+
+          DashboardCard(
             icon: Icons.visibility_outlined,
             title: 'My Vision',
             subtitle: 'Visualize your future self',
@@ -146,7 +166,14 @@ class DashboardScreen extends StatelessWidget {
             subtitle: 'Scan your meal with AI',
             backgroundColor: AppTheme.calorieCard,
             iconColor: AppTheme.gold,
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CalorieScannerScreen(),
+                ),
+              );
+            },
           ),
 
           const SizedBox(height: 28),
