@@ -1,11 +1,12 @@
 name: future_project
-description: "A new Flutter project."
-publish_to: 'none'
+description: "MuscleUp fitness app"
+
+publish_to: "none"
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.12.2
+  sdk: ">=3.8.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -22,6 +23,10 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  rename_app: ^1.6.5
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/body_types/

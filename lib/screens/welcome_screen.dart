@@ -21,7 +21,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               const Text(
-                'Future Project',
+                'MuscleUp',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 34,
