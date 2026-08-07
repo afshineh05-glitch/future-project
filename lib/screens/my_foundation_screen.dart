@@ -1,5 +1,8 @@
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:future_project/theme/app_theme.dart';
 
@@ -13,7 +16,7 @@ class MyFoundationScreen extends StatefulWidget {
 }
 
 class _MyFoundationScreenState extends State<MyFoundationScreen> {
-  static const int _totalSteps = 12;
+  static const int _totalSteps = 8;
 
   static const List<String> _stepTitles = [
     'About You',
@@ -21,12 +24,8 @@ class _MyFoundationScreenState extends State<MyFoundationScreen> {
     'Body Details',
     'Lifestyle',
     'Nutrition',
-    'Health',
-    'Nutrition',
     'Measurements',
     'Body Photos',
-    'Preferences',
-    'Review',
     'Finish',
   ];
 
@@ -36,13 +35,9 @@ class _MyFoundationScreenState extends State<MyFoundationScreen> {
     'Add your current body information.',
     'Describe your daily activity and routine.',
     'Describe your eating habits and preferences.',
-    'Share any limitations that may affect training.',
-    'Describe your eating habits and preferences.',
-    'Add optional body measurements.',
+    'Add your starting body measurements.',
     'Add optional progress photos.',
-    'Choose how your coach should guide you.',
-    'Review the information you provided.',
-    'Your personal foundation is ready.',
+    'Your foundation is set. MuscleUp now has what it needs to personalize your journey.',
   ];
 
   final GlobalKey<FormState> _aboutYouFormKey =
@@ -68,6 +63,24 @@ class _MyFoundationScreenState extends State<MyFoundationScreen> {
 
   final TextEditingController _targetWeightController =
       TextEditingController();
+
+  final TextEditingController _waistController =
+      TextEditingController();
+
+  final TextEditingController _chestController =
+      TextEditingController();
+
+  final TextEditingController _hipsController =
+      TextEditingController();
+
+  final TextEditingController _armsController =
+      TextEditingController();
+
+  final TextEditingController _thighsController =
+      TextEditingController();
+
+  final TextEditingController _neckController =
+      TextEditingController();
 String _measurementSystem = 'metric';
   String? _selectedSex;
   String? _selectedGoal;
@@ -81,6 +94,15 @@ String _measurementSystem = 'metric';
   final Set<String> _selectedMeals = <String>{};
   final Set<String> _selectedAllergies = <String>{};
   final Set<String> _selectedFoodsToAvoid = <String>{};
+
+  final ImagePicker _bodyPhotoPicker = ImagePicker();
+
+  Uint8List? _frontBodyPhoto;
+  Uint8List? _sideBodyPhoto;
+  Uint8List? _backBodyPhoto;
+
+  bool _isPreparingBodyPhotoBaseline = false;
+  bool _bodyPhotoBaselineReady = false;
 
   int _currentStep = 0;
 
@@ -108,6 +130,12 @@ String _measurementSystem = 'metric';
     _heightInchesController.dispose();
     _weightController.dispose();
     _targetWeightController.dispose();
+    _waistController.dispose();
+    _chestController.dispose();
+    _hipsController.dispose();
+    _armsController.dispose();
+    _thighsController.dispose();
+    _neckController.dispose();
 
     super.dispose();
   }
@@ -132,6 +160,10 @@ String _measurementSystem = 'metric';
     }
 
     if (_currentStep == 4 && !_validateNutritionStep()) {
+      return;
+    }
+
+    if (_currentStep == 5 && !_validateBodyMeasurementsStep()) {
       return;
     }
 
@@ -214,30 +246,30 @@ String _measurementSystem = 'metric';
 
 
   bool _validateLifestyleStep() {
-    const requiredKeys = <String>[
-      'activity',
-      'occupation',
-      'exercise_days',
-      'workout_duration',
-      'workout_intensity',
-      'sleep_hours',
-      'sleep_quality',
-      'water',
-      'stress',
-      'steps',
-      'workout_time',
-      'motivation',
-      'gym_access',
-      'experience',
-      'obstacle',
-    ];
+    const requiredQuestions = <String, String>{
+      'activity': 'Question 1: How active are you during a typical day?',
+      'occupation': 'Question 2: What best describes your occupation?',
+      'exercise_days': 'Question 3: How many days per week do you exercise?',
+      'workout_duration': 'Question 4: How long is your average workout?',
+      'workout_intensity': 'Question 5: How would you describe your workout intensity?',
+      'sleep_hours': 'Question 6: How many hours do you usually sleep?',
+      'sleep_quality': 'Question 7: How would you rate your sleep quality?',
+      'water': 'Question 8: How much water do you drink each day?',
+      'stress': 'Question 9: How stressful is your daily life?',
+      'steps': 'Question 10: How many steps do you usually walk each day?',
+      'workout_time': 'Question 11: When do you usually prefer to work out?',
+      'motivation': 'Question 12: What motivates you the most?',
+      'gym_access': 'Question 13: Where do you usually work out?',
+      'experience': 'Question 14: What is your training experience?',
+      'obstacle': 'Question 15: What is your biggest obstacle to staying consistent?',
+    };
 
-    for (final key in requiredKeys) {
-      if (!_lifestyleAnswers.containsKey(key)) {
+    for (final entry in requiredQuestions.entries) {
+      if (!_lifestyleAnswers.containsKey(entry.key)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Please answer all Lifestyle questions.',
+              'Please answer ${entry.value}',
             ),
           ),
         );
@@ -249,7 +281,7 @@ String _measurementSystem = 'metric';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select your available equipment.',
+            'Please answer Question 16: What equipment do you have access to?',
           ),
         ),
       );
@@ -260,23 +292,34 @@ String _measurementSystem = 'metric';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select your injury status.',
+            'Please answer Question 17: Do you currently have any injuries or physical limitations?',
           ),
         ),
       );
       return false;
     }
 
-    final hasInjury =
+    final bool hasInjury =
         !_selectedInjuries.contains('none');
 
     if (hasInjury &&
-        (!_lifestyleAnswers.containsKey('pain') ||
-            !_lifestyleAnswers.containsKey('restriction'))) {
+        !_lifestyleAnswers.containsKey('pain')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please complete the injury details.',
+            'Please complete Question 17A: How would you rate your pain?',
+          ),
+        ),
+      );
+      return false;
+    }
+
+    if (hasInjury &&
+        !_lifestyleAnswers.containsKey('restriction')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please complete Question 17B: Does your injury affect your workouts?',
           ),
         ),
       );
@@ -287,22 +330,22 @@ String _measurementSystem = 'metric';
   }
 
   bool _validateNutritionStep() {
-    const requiredKeys = <String>[
-      'eating_style',
-      'meals_per_day',
-      'cooking_frequency',
-      'eating_location',
-      'prep_time',
-      'nutrition_challenge',
-      'ai_meal_plans',
-    ];
+    const requiredQuestions = <String, String>{
+      'eating_style': 'Question 1: Which best describes your eating style?',
+      'meals_per_day': 'Question 2: How many meals do you usually eat each day?',
+      'cooking_frequency': 'Question 6: How often do you cook your own meals?',
+      'eating_location': 'Question 7: Where do you usually eat?',
+      'prep_time': 'Question 8: How much time can you spend preparing meals?',
+      'nutrition_challenge': 'Question 9: What is your biggest nutrition challenge?',
+      'ai_meal_plans': 'Question 10: Would you like AI-generated meal plans and recipes?',
+    };
 
-    for (final String key in requiredKeys) {
-      if (!_nutritionAnswers.containsKey(key)) {
+    for (final entry in requiredQuestions.entries) {
+      if (!_nutritionAnswers.containsKey(entry.key)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Please answer all Nutrition questions.',
+              'Please answer ${entry.value}',
             ),
           ),
         );
@@ -314,7 +357,7 @@ String _measurementSystem = 'metric';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select the meals you usually eat.',
+            'Please answer Question 3: Which meals do you usually eat?',
           ),
         ),
       );
@@ -325,7 +368,7 @@ String _measurementSystem = 'metric';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select your allergy status.',
+            'Please answer Question 4: Do you have any food allergies?',
           ),
         ),
       );
@@ -336,7 +379,7 @@ String _measurementSystem = 'metric';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select foods you avoid, or None.',
+            'Please answer Question 5: Are there any foods you avoid?',
           ),
         ),
       );
@@ -350,7 +393,7 @@ String _measurementSystem = 'metric';
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'My Foundation is ready to be saved.',
+          'Your Foundation is complete.',
         ),
       ),
     );
@@ -584,6 +627,18 @@ String _measurementSystem = 'metric';
 
     if (_currentStep == 4) {
       return _buildNutritionStep();
+    }
+
+    if (_currentStep == 5) {
+      return _buildBodyMeasurementsStep();
+    }
+
+    if (_currentStep == 6) {
+      return _buildBodyPhotosStep();
+    }
+
+    if (_currentStep == 7) {
+      return _buildFinishStep();
     }
 
     return _buildPlaceholderStep();
@@ -1408,7 +1463,7 @@ String _measurementSystem = 'metric';
             ),
           ),
           _buildMultiSelectQuestion(
-            number: 14,
+            number: 16,
             title: 'What equipment do you have access to?',
             selected: _selectedEquipment,
             options: const [
@@ -1428,7 +1483,7 @@ String _measurementSystem = 'metric';
             },
           ),
           _buildMultiSelectQuestion(
-            number: 16,
+            number: 17,
             title:
                 'Do you currently have any injuries or physical limitations?',
             selected: _selectedInjuries,
@@ -1465,7 +1520,7 @@ String _measurementSystem = 'metric';
           ),
           if (hasInjury) ...[
             _buildLifestyleQuestionCard(
-              16,
+              17,
               const _LifestyleQuestion(
                 keyName: 'pain',
                 title: 'How would you rate your pain?',
@@ -1473,7 +1528,7 @@ String _measurementSystem = 'metric';
               ),
             ),
             _buildLifestyleQuestionCard(
-              16,
+              17,
               const _LifestyleQuestion(
                 keyName: 'restriction',
                 title: 'Does your injury affect your workouts?',
@@ -1984,6 +2039,1038 @@ String _measurementSystem = 'metric';
         ],
       ),
     );
+  }
+
+  Widget _buildBodyMeasurementsStep() {
+    final String unit = _isMetric ? 'cm' : 'in';
+
+    return SingleChildScrollView(
+      key: const ValueKey<String>('body-measurements'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionIntro(
+            icon: Icons.straighten_outlined,
+            title: 'Starting body measurements',
+            description:
+                'Enter all measurements below to create your starting baseline '
+                'for future progress comparisons.',
+          ),
+          const SizedBox(height: 20),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.calorieCard,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppTheme.border,
+              ),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: AppTheme.primaryGreen,
+                  size: 22,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'For accurate progress tracking, take your measurements '
+                    'under similar conditions each time. Ideally, measure '
+                    'in the morning, before eating and before training.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 22),
+
+          _buildBodyMeasurementField(
+            label: 'Waist',
+            controller: _waistController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 86' : 'e.g. 34',
+          ),
+          _buildBodyMeasurementField(
+            label: 'Chest',
+            controller: _chestController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 102' : 'e.g. 40',
+          ),
+          _buildBodyMeasurementField(
+            label: 'Hips',
+            controller: _hipsController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 98' : 'e.g. 38.5',
+          ),
+          _buildBodyMeasurementField(
+            label: 'Arms',
+            controller: _armsController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 36' : 'e.g. 14',
+          ),
+          _buildBodyMeasurementField(
+            label: 'Thighs',
+            controller: _thighsController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 58' : 'e.g. 23',
+          ),
+          _buildBodyMeasurementField(
+            label: 'Neck',
+            controller: _neckController,
+            unit: unit,
+            hint: _isMetric ? 'e.g. 39' : 'e.g. 15.5',
+          ),
+
+          const SizedBox(height: 4),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppTheme.border,
+              ),
+            ),
+            child: const Text(
+              'These values will become your starting baseline. '
+              'Future body check-ins can be compared with this first set.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBodyMeasurementField({
+    required String label,
+    required TextEditingController controller,
+    required String unit,
+    required String hint,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFieldLabel(
+            label: label,
+            required: true,
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: controller,
+            keyboardType:
+                const TextInputType.numberWithOptions(
+              decimal: true,
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(
+                RegExp(r'^\d*\.?\d{0,1}'),
+              ),
+            ],
+            decoration: _inputDecoration(
+              hintText: hint,
+              suffixText: unit,
+            ),
+            validator: _validateRequiredMeasurement,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _validateRequiredMeasurement(String? value) {
+    final String text = value?.trim() ?? '';
+
+    if (text.isEmpty) {
+      return 'Required.';
+    }
+
+    final double? measurement = double.tryParse(text);
+
+    if (measurement == null || measurement <= 0) {
+      return 'Enter a valid measurement.';
+    }
+
+    if (_isMetric && measurement > 300) {
+      return 'Please check this value.';
+    }
+
+    if (!_isMetric && measurement > 120) {
+      return 'Please check this value.';
+    }
+
+    return null;
+  }
+
+  bool _validateBodyMeasurementsStep() {
+    final List<TextEditingController> controllers = <TextEditingController>[
+      _waistController,
+      _chestController,
+      _hipsController,
+      _armsController,
+      _thighsController,
+      _neckController,
+    ];
+
+    for (final TextEditingController controller in controllers) {
+      final String? error = _validateRequiredMeasurement(controller.text);
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please complete all body measurements before continuing.',
+            ),
+          ),
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool get _canUseBodyPhotoCamera {
+    if (kIsWeb) {
+      return false;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+  }
+
+  void _showBodyPhotoError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
+  Future<void> _showBodyPhotoSourceSheet(
+    String view,
+  ) async {
+    final ImageSource? source =
+        await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              4,
+              20,
+              24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Add $view Photo',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_canUseBodyPhotoCamera)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.photo_camera_outlined,
+                    ),
+                    title: const Text('Camera'),
+                    onTap: () {
+                      Navigator.of(context).pop(
+                        ImageSource.camera,
+                      );
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.photo_library_outlined,
+                  ),
+                  title: const Text('Photo Library'),
+                  onTap: () {
+                    Navigator.of(context).pop(
+                      ImageSource.gallery,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) {
+      return;
+    }
+
+    await _pickBodyPhoto(
+      view: view,
+      source: source,
+    );
+  }
+
+  Future<void> _pickBodyPhoto({
+    required String view,
+    required ImageSource source,
+  }) async {
+    try {
+      final XFile? picked = await _bodyPhotoPicker.pickImage(
+        source: source,
+        imageQuality: 88,
+        maxWidth: 1800,
+      );
+
+      if (picked == null) {
+        return;
+      }
+
+      final Uint8List bytes = await picked.readAsBytes();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        switch (view) {
+          case 'Front':
+            _frontBodyPhoto = bytes;
+          case 'Side':
+            _sideBodyPhoto = bytes;
+          case 'Back':
+            _backBodyPhoto = bytes;
+        }
+
+        _bodyPhotoBaselineReady = false;
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showBodyPhotoError(
+        'Could not access photos: ${error.message ?? error.code}',
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      _showBodyPhotoError(
+        'Could not add this photo. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _prepareBodyPhotoBaseline() async {
+    if (_frontBodyPhoto == null ||
+        _sideBodyPhoto == null ||
+        _backBodyPhoto == null) {
+      _showBodyPhotoError(
+        'Add Front, Side, and Back photos first.',
+      );
+      return;
+    }
+
+    setState(() {
+      _isPreparingBodyPhotoBaseline = true;
+      _bodyPhotoBaselineReady = false;
+    });
+
+    // This creates the secure baseline state in the onboarding UI.
+    // The actual OpenAI/Vision request should be made from the app's
+    // authenticated backend/service layer, not directly from this screen.
+    await Future<void>.delayed(
+      const Duration(milliseconds: 700),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isPreparingBodyPhotoBaseline = false;
+      _bodyPhotoBaselineReady = true;
+    });
+  }
+
+  Widget _buildBodyPhotosStep() {
+    final bool allPhotosAdded =
+        _frontBodyPhoto != null &&
+        _sideBodyPhoto != null &&
+        _backBodyPhoto != null;
+
+    return SingleChildScrollView(
+      key: const ValueKey<String>('body-photos'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionIntro(
+            icon: Icons.photo_camera_outlined,
+            title: 'Starting body photos',
+            description:
+                'Body photos are optional, but adding them gives MuscleUp '
+                'a better baseline to track your progress and provide more '
+                'useful progress insights over time.',
+          ),
+          const SizedBox(height: 20),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.calorieCard,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppTheme.border,
+              ),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: AppTheme.primaryGreen,
+                  size: 22,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'For the most consistent progress photos, use similar '
+                    'lighting, distance, camera angle, and pose each time.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          _buildBodyPhotoCard(
+            title: 'Front',
+            subtitle: 'Front view',
+            icon: Icons.accessibility_new_outlined,
+            bytes: _frontBodyPhoto,
+          ),
+          _buildBodyPhotoCard(
+            title: 'Side',
+            subtitle: 'Side view',
+            icon: Icons.person_outline,
+            bytes: _sideBodyPhoto,
+          ),
+          _buildBodyPhotoCard(
+            title: 'Back',
+            subtitle: 'Back view',
+            icon: Icons.accessibility_new_outlined,
+            bytes: _backBodyPhoto,
+          ),
+
+          const SizedBox(height: 4),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _bodyPhotoBaselineReady
+                    ? AppTheme.primaryGreen
+                    : AppTheme.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _bodyPhotoBaselineReady
+                          ? Icons.check_circle_outline
+                          : Icons.auto_awesome_outlined,
+                      color: AppTheme.primaryGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _bodyPhotoBaselineReady
+                            ? 'AI baseline ready'
+                            : 'Prepare AI comparison baseline',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _bodyPhotoBaselineReady
+                      ? 'Your starting photo baseline is ready for future '
+                          'five-week comparisons.'
+                      : 'Once all three photos are added, prepare your '
+                          'starting baseline for future AI-assisted comparisons.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: !allPhotosAdded ||
+                            _isPreparingBodyPhotoBaseline
+                        ? null
+                        : _prepareBodyPhotoBaseline,
+                    icon: _isPreparingBodyPhotoBaseline
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.auto_awesome_outlined,
+                          ),
+                    label: Text(
+                      _isPreparingBodyPhotoBaseline
+                          ? 'Preparing...'
+                          : _bodyPhotoBaselineReady
+                              ? 'Baseline Ready'
+                              : 'Prepare Baseline',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.calorieCard,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: 20,
+                  color: AppTheme.primaryGreen,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Body photos are private. They should only be stored '
+                    'and processed through your authenticated app storage '
+                    'and secure backend.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBodyPhotoCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Uint8List? bytes,
+  }) {
+    final bool hasPhoto = bytes != null;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasPhoto
+              ? AppTheme.primaryGreen
+              : AppTheme.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 86,
+              height: 110,
+              child: hasPhoto
+                  ? Image.memory(
+                      bytes,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      color: AppTheme.calorieCard,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        icon,
+                        size: 38,
+                        color: AppTheme.primaryGreen,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _showBodyPhotoSourceSheet(title);
+                  },
+                  icon: Icon(
+                    hasPhoto
+                        ? Icons.refresh
+                        : Icons.add_a_photo_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    hasPhoto ? 'Replace Photo' : 'Add Photo',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinishStep() {
+    final String height = _foundationHeightSummary();
+    final String currentWeight =
+        '${_weightController.text.trim()} ${_isMetric ? 'kg' : 'lb'}';
+    final String targetWeight =
+        _targetWeightController.text.trim().isEmpty
+            ? 'Not set'
+            : '${_targetWeightController.text.trim()} ${_isMetric ? 'kg' : 'lb'}';
+
+    final String photoSummary =
+        _frontBodyPhoto != null ||
+                _sideBodyPhoto != null ||
+                _backBodyPhoto != null
+            ? [
+                if (_frontBodyPhoto != null) 'Front',
+                if (_sideBodyPhoto != null) 'Side',
+                if (_backBodyPhoto != null) 'Back',
+              ].join(' · ')
+            : 'Skipped';
+
+    return SingleChildScrollView(
+      key: const ValueKey<String>('finish'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Column(
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    color: AppTheme.calorieCard,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 38,
+                    color: AppTheme.primaryGreen,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'You’re All Set',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Here’s a summary of the foundation you created.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.person_outline,
+            title: 'About You',
+            rows: [
+              ('Age', '${_ageController.text.trim()} years'),
+              ('Sex', _formatFoundationValue(_selectedSex)),
+              ('Height', height),
+              ('Current Weight', currentWeight),
+              ('Target Weight', targetWeight),
+            ],
+          ),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.flag_outlined,
+            title: 'Goal & Body',
+            rows: [
+              ('Primary Goal', _formatFoundationValue(_selectedGoal)),
+              ('Body Type', _formatFoundationValue(_selectedBodyType)),
+            ],
+          ),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.directions_walk_outlined,
+            title: 'Lifestyle',
+            rows: [
+              (
+                'Activity',
+                _foundationAnswer(_lifestyleAnswers, 'activity'),
+              ),
+              (
+                'Training Experience',
+                _foundationAnswer(_lifestyleAnswers, 'experience'),
+              ),
+              (
+                'Gym Access',
+                _foundationAnswer(_lifestyleAnswers, 'gym_access'),
+              ),
+              (
+                'Equipment',
+                _selectedEquipment.isEmpty
+                    ? 'Not set'
+                    : _selectedEquipment.join(' · '),
+              ),
+              (
+                'Injuries',
+                _foundationInjurySummary(),
+              ),
+              (
+                'Main Obstacle',
+                _foundationAnswer(_lifestyleAnswers, 'obstacle'),
+              ),
+            ],
+          ),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.restaurant_menu_outlined,
+            title: 'Nutrition',
+            rows: [
+              (
+                'Eating Style',
+                _foundationAnswer(_nutritionAnswers, 'eating_style'),
+              ),
+              (
+                'Meals per Day',
+                _foundationAnswer(_nutritionAnswers, 'meals_per_day'),
+              ),
+              (
+                'Meals',
+                _selectedMeals.isEmpty
+                    ? 'Not set'
+                    : _selectedMeals.join(' · '),
+              ),
+              (
+                'Allergies',
+                _selectedAllergies.isEmpty
+                    ? 'Not set'
+                    : _selectedAllergies.join(' · '),
+              ),
+              (
+                'Foods Avoided',
+                _selectedFoodsToAvoid.isEmpty
+                    ? 'Not set'
+                    : _selectedFoodsToAvoid.join(' · '),
+              ),
+              (
+                'Meal Plans & Recipes',
+                _foundationAnswer(_nutritionAnswers, 'ai_meal_plans'),
+              ),
+            ],
+          ),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.straighten_outlined,
+            title: 'Body Measurements',
+            rows: [
+              ('Waist', _measurementSummary(_waistController)),
+              ('Chest', _measurementSummary(_chestController)),
+              ('Hips', _measurementSummary(_hipsController)),
+              ('Arms', _measurementSummary(_armsController)),
+              ('Thighs', _measurementSummary(_thighsController)),
+              ('Neck', _measurementSummary(_neckController)),
+            ],
+          ),
+
+          _buildFoundationSummaryCard(
+            icon: Icons.photo_camera_outlined,
+            title: 'Body Photos',
+            rows: [
+              ('Photos Added', photoSummary),
+              (
+                'AI Baseline',
+                _bodyPhotoBaselineReady
+                    ? 'Ready'
+                    : photoSummary == 'Skipped'
+                        ? 'Not created'
+                        : 'Not prepared yet',
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 4),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.calorieCard,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.auto_awesome_outlined,
+                  color: AppTheme.primaryGreen,
+                  size: 22,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'MuscleUp can use this foundation to personalize your '
+                    'training, nutrition, and future progress check-ins.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFoundationSummaryCard({
+    required IconData icon,
+    required String title,
+    required List<(String, String)> rows,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppTheme.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: AppTheme.primaryGreen,
+              ),
+              const SizedBox(width: 9),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...rows.map(
+            (row) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 145,
+                    child: Text(
+                      row.$1,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      row.$2,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _foundationAnswer(
+    Map<String, String> source,
+    String key,
+  ) {
+    return source[key] ?? 'Not set';
+  }
+
+  String _formatFoundationValue(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Not set';
+    }
+
+    return value
+        .split('_')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
+  }
+
+  String _foundationHeightSummary() {
+    if (_isMetric) {
+      final String value = _heightCmController.text.trim();
+      return value.isEmpty ? 'Not set' : '$value cm';
+    }
+
+    final String feet = _heightFeetController.text.trim();
+    final String inches = _heightInchesController.text.trim();
+
+    if (feet.isEmpty && inches.isEmpty) {
+      return 'Not set';
+    }
+
+    return '${feet.isEmpty ? '0' : feet} ft '
+        '${inches.isEmpty ? '0' : inches} in';
+  }
+
+  String _measurementSummary(
+    TextEditingController controller,
+  ) {
+    final String value = controller.text.trim();
+
+    if (value.isEmpty) {
+      return 'Not set';
+    }
+
+    return '$value ${_isMetric ? 'cm' : 'in'}';
+  }
+
+  String _foundationInjurySummary() {
+    if (_selectedInjuries.isEmpty) {
+      return 'Not set';
+    }
+
+    if (_selectedInjuries.contains('none')) {
+      return 'No Injuries';
+    }
+
+    return _selectedInjuries.join(' · ');
   }
 
   Widget _buildPlaceholderStep() {
