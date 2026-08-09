@@ -3,40 +3,72 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
+import 'login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController =
       TextEditingController();
 
   final TextEditingController _passwordController =
       TextEditingController();
 
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _signIn() async {
+  Future<void> _signUp() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text;
+    final String confirmPassword =
+        _confirmPasswordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
+    if (email.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please enter your email and password.',
+            'Please complete all fields.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Passwords do not match.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password must be at least 6 characters.',
           ),
         ),
       );
@@ -49,23 +81,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final AuthResponse response =
-          await Supabase.instance.client.auth.signInWithPassword(
+          await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
       );
 
-      if (response.user == null) {
-        throw const AuthException(
-          'Sign in failed.',
+      if (!mounted) return;
+
+      if (response.session != null) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const DashboardScreen(),
+          ),
+          (_) => false,
         );
+        return;
       }
 
-      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Account created. Please check your email to confirm your account.',
+          ),
+        ),
+      );
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const DashboardScreen(),
+          builder: (_) => const LoginScreen(),
         ),
       );
     } on AuthException catch (error) {
@@ -82,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Could not sign in. Please try again.',
+            'Could not create your account. Please try again.',
           ),
         ),
       );
@@ -111,7 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 24),
 
             const Text(
-              'Welcome Back',
+              'Create Account',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 32,
@@ -122,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 10),
 
             const Text(
-              'Log in to continue',
+              'Create your MuscleUp account',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -150,15 +195,10 @@ class _LoginScreenState extends State<LoginScreen> {
             TextField(
               controller: _passwordController,
               obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) {
-                if (!_isLoading) {
-                  _signIn();
-                }
-              },
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Password',
-                hintText: 'Enter your password',
+                hintText: 'Create a password',
                 prefixIcon: const Icon(
                   Icons.lock_outline,
                 ),
@@ -178,13 +218,46 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
 
+            const SizedBox(height: 18),
+
+            TextField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirmPassword,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) {
+                if (!_isLoading) {
+                  _signUp();
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Confirm Password',
+                hintText: 'Enter your password again',
+                prefixIcon: const Icon(
+                  Icons.lock_outline,
+                ),
+                suffixIcon: IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPassword =
+                          !_obscureConfirmPassword;
+                    });
+                  },
+                  icon: Icon(
+                    _obscureConfirmPassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 28),
 
             SizedBox(
               height: 56,
               child: ElevatedButton(
                 onPressed:
-                    _isLoading ? null : _signIn,
+                    _isLoading ? null : _signUp,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
                       AppTheme.rolexGreen,
@@ -205,13 +278,30 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       )
                     : const Text(
-                        'Sign In',
+                        'Create Account',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight:
                               FontWeight.w700,
                         ),
                       ),
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const LoginScreen(),
+                  ),
+                );
+              },
+              child: const Text(
+                'Already have an account? Sign In',
               ),
             ),
           ],

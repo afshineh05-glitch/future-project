@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:future_project/screens/dashboard_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 
 class MyFoundationScreen extends StatefulWidget {
@@ -103,6 +105,9 @@ String _measurementSystem = 'metric';
 
   bool _isPreparingBodyPhotoBaseline = false;
   bool _bodyPhotoBaselineReady = false;
+  bool _isSavingFoundation = false;
+  bool _isLoadingFoundation = true;
+  bool _viewingSavedFoundation = false;
 
   int _currentStep = 0;
 
@@ -123,6 +128,315 @@ String _measurementSystem = 'metric';
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadSavedFoundation();
+  }
+
+  Future<void> _loadSavedFoundation() async {
+    final SupabaseClient supabase = Supabase.instance.client;
+    final User? user = supabase.auth.currentUser;
+
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _isLoadingFoundation = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      final Map<String, dynamic>? row = await supabase
+          .from('user_foundations')
+          .select()
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (row == null) {
+        setState(() {
+          _isLoadingFoundation = false;
+        });
+        return;
+      }
+
+      _hydrateFoundationFromDatabase(row);
+
+      final bool completed = row['is_completed'] == true;
+
+      setState(() {
+        _isLoadingFoundation = false;
+        _viewingSavedFoundation = completed;
+        if (completed) {
+          _currentStep = _totalSteps - 1;
+        }
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingFoundation = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not load your saved Foundation: $error',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _hydrateFoundationFromDatabase(
+    Map<String, dynamic> row,
+  ) {
+    _measurementSystem =
+        (row['measurement_system'] as String?) ?? 'metric';
+
+    _selectedSex = row['sex'] as String?;
+    _selectedGoal = row['primary_goal'] as String?;
+    _selectedBodyType = row['body_type'] as String?;
+
+    _ageController.text = _databaseNumberText(row['age']);
+
+    final double? heightCm = _asDouble(row['height_cm']);
+    final double? weightKg = _asDouble(row['weight_kg']);
+    final double? targetWeightKg =
+        _asDouble(row['target_weight_kg']);
+
+    if (_measurementSystem == 'imperial') {
+      if (heightCm != null) {
+        final double totalInches = heightCm / 2.54;
+        final int feet = totalInches ~/ 12;
+        final int inches = (totalInches - (feet * 12)).round();
+        _heightFeetController.text = '$feet';
+        _heightInchesController.text = '$inches';
+      }
+
+      if (weightKg != null) {
+        _weightController.text =
+            _trimDatabaseNumber(weightKg / 0.45359237);
+      }
+
+      if (targetWeightKg != null) {
+        _targetWeightController.text =
+            _trimDatabaseNumber(targetWeightKg / 0.45359237);
+      }
+    } else {
+      if (heightCm != null) {
+        _heightCmController.text =
+            _trimDatabaseNumber(heightCm);
+      }
+
+      if (weightKg != null) {
+        _weightController.text =
+            _trimDatabaseNumber(weightKg);
+      }
+
+      if (targetWeightKg != null) {
+        _targetWeightController.text =
+            _trimDatabaseNumber(targetWeightKg);
+      }
+    }
+
+    _loadMeasurementController(
+      _waistController,
+      row['waist_cm'],
+    );
+    _loadMeasurementController(
+      _chestController,
+      row['chest_cm'],
+    );
+    _loadMeasurementController(
+      _hipsController,
+      row['hips_cm'],
+    );
+    _loadMeasurementController(
+      _armsController,
+      row['arm_cm'],
+    );
+    _loadMeasurementController(
+      _thighsController,
+      row['thigh_cm'],
+    );
+    _loadMeasurementController(
+      _neckController,
+      row['neck_cm'],
+    );
+
+    final Map<String, dynamic> lifestyle =
+        _dynamicMap(row['lifestyle']);
+    _lifestyleAnswers
+      ..clear()
+      ..addAll(
+        lifestyle.map(
+          (key, value) => MapEntry(
+            key,
+            value?.toString() ?? '',
+          ),
+        )..removeWhere((key, value) => value.isEmpty),
+      );
+
+    final Map<String, dynamic> nutrition =
+        _dynamicMap(row['nutrition']);
+    _nutritionAnswers
+      ..clear()
+      ..addAll(
+        nutrition.map(
+          (key, value) => MapEntry(
+            key,
+            value?.toString() ?? '',
+          ),
+        )..removeWhere((key, value) => value.isEmpty),
+      );
+
+    _replaceStringSet(
+      _selectedEquipment,
+      row['equipment'],
+    );
+    _replaceStringSet(
+      _selectedAllergies,
+      row['allergies'],
+    );
+    _replaceStringSet(
+      _selectedMeals,
+      row['meals'],
+    );
+    _replaceStringSet(
+      _selectedFoodsToAvoid,
+      row['foods_to_avoid'],
+    );
+
+    final dynamic lifestyleInjuries = lifestyle['injuries'];
+    if (lifestyleInjuries is List) {
+      _replaceStringSet(
+        _selectedInjuries,
+        lifestyleInjuries,
+      );
+    } else {
+      final String? injuries = row['injuries'] as String?;
+      _selectedInjuries.clear();
+
+      if (injuries == 'No Injuries') {
+        _selectedInjuries.add('none');
+      } else if (injuries != null &&
+          injuries.isNotEmpty &&
+          injuries != 'Not set') {
+        _selectedInjuries.addAll(
+          injuries.split(' · '),
+        );
+      }
+    }
+
+    _bodyPhotoBaselineReady =
+        row['body_photo_baseline_ready'] == true;
+  }
+
+  Map<String, dynamic> _dynamicMap(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+
+    if (value is Map) {
+      return value.map(
+        (key, item) => MapEntry(
+          key.toString(),
+          item,
+        ),
+      );
+    }
+
+    return <String, dynamic>{};
+  }
+
+  void _replaceStringSet(
+    Set<String> target,
+    dynamic value,
+  ) {
+    target.clear();
+
+    if (value is List) {
+      target.addAll(
+        value
+            .where((item) => item != null)
+            .map((item) => item.toString()),
+      );
+    }
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  String _databaseNumberText(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+
+    if (value is num) {
+      return _trimDatabaseNumber(value.toDouble());
+    }
+
+    return value.toString();
+  }
+
+  String _trimDatabaseNumber(double value) {
+    if (value == value.roundToDouble()) {
+      return value.round().toString();
+    }
+
+    return value.toStringAsFixed(1);
+  }
+
+  void _loadMeasurementController(
+    TextEditingController controller,
+    dynamic databaseValue,
+  ) {
+    final double? cm = _asDouble(databaseValue);
+
+    if (cm == null) {
+      controller.clear();
+      return;
+    }
+
+    final double displayValue =
+        _measurementSystem == 'imperial'
+            ? cm / 2.54
+            : cm;
+
+    controller.text =
+        _trimDatabaseNumber(displayValue);
+  }
+
+  void _editSavedFoundation() {
+    setState(() {
+      _viewingSavedFoundation = false;
+      _currentStep = 0;
+    });
+  }
+
+  void _returnToDashboard() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const DashboardScreen(),
+      ),
+      (route) => false,
+    );
+  }
+
+  @override
   void dispose() {
     _ageController.dispose();
     _heightCmController.dispose();
@@ -140,7 +454,7 @@ String _measurementSystem = 'metric';
     super.dispose();
   }
 
-  void _goNext() {
+  Future<void> _goNext() async {
     FocusScope.of(context).unfocus();
 
     if (_currentStep == 0 && !_validateAboutYouStep()) {
@@ -168,7 +482,7 @@ String _measurementSystem = 'metric';
     }
 
     if (_isLastStep) {
-      _completeFoundation();
+      await _completeFoundation();
       return;
     }
 
@@ -389,18 +703,268 @@ String _measurementSystem = 'metric';
     return true;
   }
 
-  void _completeFoundation() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Your Foundation is complete.',
+  Future<void> _completeFoundation() async {
+    if (_isSavingFoundation) {
+      return;
+    }
+
+    final SupabaseClient supabase = Supabase.instance.client;
+    final User? user = supabase.auth.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please sign in before saving your Foundation.',
+          ),
         ),
-      ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingFoundation = true;
+    });
+
+    try {
+      final DateTime now = DateTime.now().toUtc();
+
+      final Map<String, dynamic> foundationData = <String, dynamic>{
+        'user_id': user.id,
+        'measurement_system': _measurementSystem,
+        'current_section': _totalSteps,
+        'completion_percent': 100,
+        'is_completed': true,
+
+        'age': int.tryParse(_ageController.text.trim()),
+        'sex': _selectedSex,
+        'height_cm': _heightCmForDatabase(),
+        'weight_kg': _weightKgForDatabase(
+          _weightController.text,
+        ),
+        'target_weight_kg': _weightKgForDatabase(
+          _targetWeightController.text,
+        ),
+
+        'primary_goal': _selectedGoal,
+        'body_type': _selectedBodyType,
+
+        'training_level': _lifestyleAnswers['experience'],
+        'training_days_per_week': _trainingDaysForDatabase(),
+        'session_duration_minutes': _sessionDurationForDatabase(),
+        'training_location': _lifestyleAnswers['gym_access'],
+        'equipment': _selectedEquipment.toList(),
+        'preferred_training_time': _lifestyleAnswers['workout_time'],
+
+        'injuries': _foundationInjurySummary(),
+        'pain_notes': _lifestyleAnswers['pain'],
+        'exercises_to_avoid': <String>[],
+
+        'job_activity_level': _lifestyleAnswers['activity'],
+        'sleep_quality': _lifestyleAnswers['sleep_quality'],
+
+        'diet_preference': _nutritionAnswers['eating_style'],
+        'allergies': _selectedAllergies.toList(),
+        'disliked_foods': _selectedFoodsToAvoid.toList(),
+        'meals': _selectedMeals.toList(),
+        'foods_to_avoid': _selectedFoodsToAvoid.toList(),
+        'meals_per_day': _mealsPerDayForDatabase(),
+        'cooking_level': _nutritionAnswers['cooking_frequency'],
+
+        'lifestyle': <String, dynamic>{
+          ..._lifestyleAnswers,
+          'equipment': _selectedEquipment.toList(),
+          'injuries': _selectedInjuries.toList(),
+        },
+        'nutrition': <String, dynamic>{
+          ..._nutritionAnswers,
+          'meals': _selectedMeals.toList(),
+          'allergies': _selectedAllergies.toList(),
+          'foods_to_avoid': _selectedFoodsToAvoid.toList(),
+        },
+
+        'waist_cm': _measurementCmForDatabase(_waistController),
+        'chest_cm': _measurementCmForDatabase(_chestController),
+        'hips_cm': _measurementCmForDatabase(_hipsController),
+        'arm_cm': _measurementCmForDatabase(_armsController),
+        'thigh_cm': _measurementCmForDatabase(_thighsController),
+        'neck_cm': _measurementCmForDatabase(_neckController),
+
+        // Photo URLs stay null until Storage upload is connected.
+        'body_photo_baseline_ready': false,
+        'completed_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      };
+
+      await supabase
+          .from('user_foundations')
+          .upsert(
+            foundationData,
+            onConflict: 'user_id',
+          );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your Foundation was saved successfully.',
+          ),
+        ),
+      );
+
+      _returnToDashboard();
+    } on PostgrestException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not save Foundation: ${error.message}',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save your Foundation. Please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingFoundation = false;
+        });
+      }
+    }
+  }
+
+  double? _heightCmForDatabase() {
+    if (_isMetric) {
+      return double.tryParse(
+        _heightCmController.text.trim(),
+      );
+    }
+
+    final double? feet = double.tryParse(
+      _heightFeetController.text.trim(),
     );
+    final double? inches = double.tryParse(
+      _heightInchesController.text.trim(),
+    );
+
+    if (feet == null && inches == null) {
+      return null;
+    }
+
+    final double totalInches =
+        (feet ?? 0) * 12 + (inches ?? 0);
+
+    return totalInches * 2.54;
+  }
+
+  double? _weightKgForDatabase(String value) {
+    final double? parsed = double.tryParse(value.trim());
+
+    if (parsed == null) {
+      return null;
+    }
+
+    if (_isMetric) {
+      return parsed;
+    }
+
+    return parsed * 0.45359237;
+  }
+
+  double? _measurementCmForDatabase(
+    TextEditingController controller,
+  ) {
+    final double? parsed = double.tryParse(
+      controller.text.trim(),
+    );
+
+    if (parsed == null) {
+      return null;
+    }
+
+    if (_isMetric) {
+      return parsed;
+    }
+
+    return parsed * 2.54;
+  }
+
+  int? _trainingDaysForDatabase() {
+    switch (_lifestyleAnswers['exercise_days']) {
+      case 'Never':
+        return 0;
+      case '1–2 Days':
+        return 2;
+      case '3–4 Days':
+        return 4;
+      case '5–6 Days':
+        return 6;
+      case 'Every Day':
+        return 7;
+      default:
+        return null;
+    }
+  }
+
+  int? _sessionDurationForDatabase() {
+    switch (_lifestyleAnswers['workout_duration']) {
+      case 'Less than 30 Minutes':
+        return 20;
+      case '30–45 Minutes':
+        return 38;
+      case '45–60 Minutes':
+        return 53;
+      case '60–90 Minutes':
+        return 75;
+      case 'More than 90 Minutes':
+        return 100;
+      default:
+        return null;
+    }
+  }
+
+  int? _mealsPerDayForDatabase() {
+    switch (_nutritionAnswers['meals_per_day']) {
+      case '2 Meals':
+        return 2;
+      case '3 Meals':
+        return 3;
+      case '4 Meals':
+        return 4;
+      case '5+ Meals':
+        return 5;
+      default:
+        return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingFoundation) {
+      return const Scaffold(
+        backgroundColor: AppTheme.background,
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     final String currentTitle =
         _stepTitles[_currentStep];
 
@@ -552,6 +1116,61 @@ String _measurementSystem = 'metric';
   }
 
   Widget _buildNavigationButtons() {
+    if (_viewingSavedFoundation) {
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _returnToDashboard,
+              icon: const Icon(
+                Icons.dashboard_outlined,
+              ),
+              label: const Text(
+                'Dashboard',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor:
+                    AppTheme.textPrimary,
+                minimumSize:
+                    const Size.fromHeight(54),
+                side: const BorderSide(
+                  color: AppTheme.border,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(18),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            flex: 2,
+            child: FilledButton.icon(
+              onPressed: _editSavedFoundation,
+              icon: const Icon(
+                Icons.edit_outlined,
+              ),
+              label: const Text(
+                'Edit Foundation',
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor:
+                    AppTheme.primaryGreen,
+                foregroundColor: Colors.white,
+                minimumSize:
+                    const Size.fromHeight(54),
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(18),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
         Expanded(
@@ -581,7 +1200,7 @@ String _measurementSystem = 'metric';
         Expanded(
           flex: 2,
           child: FilledButton.icon(
-            onPressed: _goNext,
+            onPressed: _isSavingFoundation ? null : _goNext,
             style: FilledButton.styleFrom(
               backgroundColor:
                   AppTheme.primaryGreen,
@@ -593,15 +1212,25 @@ String _measurementSystem = 'metric';
                     BorderRadius.circular(18),
               ),
             ),
-            icon: Icon(
-              _isLastStep
-                  ? Icons.check_circle_outline
-                  : Icons.arrow_forward,
-            ),
+            icon: _isSavingFoundation && _isLastStep
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Icon(
+                    _isLastStep
+                        ? Icons.check_circle_outline
+                        : Icons.arrow_forward,
+                  ),
             label: Text(
-              _isLastStep
-                  ? 'Complete'
-                  : 'Continue',
+              _isSavingFoundation && _isLastStep
+                  ? 'Saving...'
+                  : _isLastStep
+                      ? 'Complete'
+                      : 'Continue',
             ),
           ),
         ),

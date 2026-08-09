@@ -1,13 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:future_project/screens/calorie_scanner_screen.dart';
 import 'package:future_project/screens/intelligent_coach_screen.dart';
 import 'package:future_project/screens/journey_screen.dart';
 import 'package:future_project/screens/vision_screen.dart';
+import 'package:future_project/screens/welcome_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/dashboard_card.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
+
+  Future<void> _signOut(BuildContext context) async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+
+      if (!context.mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const WelcomeScreen(),
+        ),
+        (route) => false,
+      );
+    } on AuthException catch (error) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not sign out. Please try again.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +55,17 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Sign Out',
+            onPressed: () {
+              _signOut(context);
+            },
+            icon: const Icon(
+              Icons.logout_outlined,
+            ),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
@@ -61,7 +109,9 @@ class DashboardScreen extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
+                  color: Colors.black.withValues(
+                    alpha: 0.06,
+                  ),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -76,7 +126,8 @@ class DashboardScreen extends StatelessWidget {
                     value: 0.4,
                     minHeight: 10,
                     backgroundColor: AppTheme.visionCard,
-                    valueColor: AlwaysStoppedAnimation<Color>(
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(
                       AppTheme.primaryGreen,
                     ),
                   ),
@@ -104,6 +155,7 @@ class DashboardScreen extends StatelessWidget {
               color: AppTheme.textPrimary,
             ),
           ),
+
           const SizedBox(height: 14),
 
           DashboardCard(
@@ -116,7 +168,8 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const IntelligentCoachScreen(),
+                  builder: (_) =>
+                      const IntelligentCoachScreen(),
                 ),
               );
             },
@@ -134,7 +187,8 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const VisionScreen(),
+                  builder: (_) =>
+                      const VisionScreen(),
                 ),
               );
             },
@@ -152,7 +206,8 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const JourneyScreen(),
+                  builder: (_) =>
+                      const JourneyScreen(),
                 ),
               );
             },
@@ -170,7 +225,8 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const CalorieScannerScreen(),
+                  builder: (_) =>
+                      const CalorieScannerScreen(),
                 ),
               );
             },
@@ -186,6 +242,7 @@ class DashboardScreen extends StatelessWidget {
               color: AppTheme.textPrimary,
             ),
           ),
+
           const SizedBox(height: 12),
 
           Container(

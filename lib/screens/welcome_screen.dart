@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import 'signup_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -14,12 +16,15 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(),
+
               const Icon(
                 Icons.auto_awesome,
                 size: 88,
                 color: AppTheme.accentGreen,
               ),
+
               const SizedBox(height: 24),
+
               const Text(
                 'MuscleUp',
                 textAlign: TextAlign.center,
@@ -28,7 +33,9 @@ class WelcomeScreen extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+
               const SizedBox(height: 24),
+
               const Text(
                 'Trust your belief.\nLet your actions bring it to life.',
                 textAlign: TextAlign.center,
@@ -38,7 +45,9 @@ class WelcomeScreen extends StatelessWidget {
                   color: Colors.white70,
                 ),
               ),
+
               const Spacer(),
+
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -47,7 +56,7 @@ class WelcomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const LoginScreen(),
+                        builder: (_) => const SignUpScreen(),
                       ),
                     );
                   },
@@ -59,9 +68,33 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ),
                   child: const Text(
-                    'Start',
+                    'Create Account',
                     style: TextStyle(
                       fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Sign In',
+                    style: TextStyle(
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
