@@ -4,6 +4,20 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/screens/my_foundation_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 
+class TodayCoachState {
+  final String morningBrief;
+  final String priority;
+  final String? reminder;
+  final String eveningWrapUp;
+
+  const TodayCoachState({
+    required this.morningBrief,
+    required this.priority,
+    required this.reminder,
+    required this.eveningWrapUp,
+  });
+}
+
 class TodaysCoachScreen extends StatefulWidget {
   const TodaysCoachScreen({super.key});
 
@@ -16,8 +30,12 @@ class _TodaysCoachScreenState
     extends State<TodaysCoachScreen> {
   bool _isLoading = true;
   String? _errorMessage;
-
   Map<String, dynamic>? _foundation;
+  TodayCoachState? _todayState;
+
+  bool _isSendingQuestion = false;
+  String? _lastQuestion;
+  String? _lastAnswer;
 
   final TextEditingController _questionController =
       TextEditingController();
@@ -35,9 +53,7 @@ class _TodaysCoachScreenState
   }
 
   Future<void> _loadFoundation() async {
-    final SupabaseClient supabase =
-        Supabase.instance.client;
-
+    final SupabaseClient supabase = Supabase.instance.client;
     final User? user = supabase.auth.currentUser;
 
     if (user == null) {
@@ -48,22 +64,22 @@ class _TodaysCoachScreenState
         _errorMessage =
             'Please sign in to use Today’s Coach.';
       });
-
       return;
     }
 
     try {
-      final Map<String, dynamic>? row =
-          await supabase
-              .from('user_foundations')
-              .select()
-              .eq('user_id', user.id)
-              .maybeSingle();
+      final Map<String, dynamic>? row = await supabase
+          .from('user_foundations')
+          .select()
+          .eq('user_id', user.id)
+          .maybeSingle();
 
       if (!mounted) return;
 
       setState(() {
         _foundation = row;
+        _todayState =
+            row == null ? null : _buildTodayState(row);
         _isLoading = false;
         _errorMessage = null;
       });
@@ -72,31 +88,24 @@ class _TodaysCoachScreenState
 
       setState(() {
         _isLoading = false;
+        _foundation = null;
+        _todayState = null;
         _errorMessage =
             'Could not load your Foundation.';
       });
     }
   }
 
-  bool get _foundationCompleted {
-    return _foundation?['is_completed'] == true;
-  }
+  bool get _foundationCompleted =>
+      _foundation?['is_completed'] == true;
 
-  Map<String, dynamic> get _lifestyle {
-    return _asMap(
-      _foundation?['lifestyle'],
-    );
-  }
+  Map<String, dynamic> get _lifestyle =>
+      _asMap(_foundation?['lifestyle']);
 
-  Map<String, dynamic> get _nutrition {
-    return _asMap(
-      _foundation?['nutrition'],
-    );
-  }
+  Map<String, dynamic> get _nutrition =>
+      _asMap(_foundation?['nutrition']);
 
-  Map<String, dynamic> _asMap(
-    dynamic value,
-  ) {
+  Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
       return value;
     }
@@ -113,278 +122,354 @@ class _TodaysCoachScreenState
     return <String, dynamic>{};
   }
 
-  String _value(
-    Map<String, dynamic> source,
+  String _textValue(
+    Map<String, dynamic> map,
     String key, {
     String fallback = 'Not set',
   }) {
-    final dynamic raw = source[key];
+    final dynamic value = map[key];
 
-    if (raw == null) {
-      return fallback;
-    }
+    if (value == null) return fallback;
 
-    final String text =
-        raw.toString().trim();
-
-    if (text.isEmpty) {
-      return fallback;
-    }
-
-    return text;
+    final String text = value.toString().trim();
+    return text.isEmpty ? fallback : text;
   }
 
-  String get _goal {
-    return _foundation?['primary_goal']
-            ?.toString() ??
-        'improve_health';
-  }
-
-  String get _goalLabel {
-    switch (_goal) {
+  String _goalLabelFor(String goal) {
+    switch (goal) {
       case 'lose_fat':
         return 'Lose Fat';
-
       case 'build_muscle':
         return 'Build Muscle';
-
       case 'maintain_weight':
         return 'Maintain Weight';
-
       case 'improve_fitness':
         return 'Improve Fitness';
-
       case 'athletic_performance':
         return 'Athletic Performance';
-
       default:
         return 'Improve Health';
     }
   }
 
-  String get _greeting {
-    final int hour =
-        DateTime.now().hour;
+  TodayCoachState _buildTodayState(
+    Map<String, dynamic> foundation,
+  ) {
+    final Map<String, dynamic> lifestyle =
+        _asMap(foundation['lifestyle']);
 
-    if (hour < 12) {
-      return 'Good morning';
-    }
+    final String goal =
+        foundation['primary_goal']?.toString() ??
+        'improve_health';
 
-    if (hour < 18) {
-      return 'Good afternoon';
-    }
+    final String goalLabel = _goalLabelFor(goal);
 
-    return 'Good evening';
-  }
-
-  String get _morningBrief {
     final String sleepQuality =
-        _value(
-      _lifestyle,
+        _textValue(
+      lifestyle,
       'sleep_quality',
     );
 
+    final String sleepHours =
+        _textValue(
+      lifestyle,
+      'sleep_hours',
+    );
+
     final String stress =
-        _value(
-      _lifestyle,
+        _textValue(
+      lifestyle,
       'stress',
     );
 
-    return 'Your current goal is $_goalLabel. '
-        'Your usual sleep quality is $sleepQuality '
-        'and your daily stress is $stress. '
-        'Today, keep your attention on the few things '
-        'that matter most.';
-  }
-
-  String get _todayPriority {
     final String obstacle =
-        _value(
-      _lifestyle,
+        _textValue(
+      lifestyle,
       'obstacle',
       fallback: '',
     );
 
+    String priority;
+
     if (obstacle == 'Lack of Time' ||
         obstacle == 'Busy Schedule') {
-      return 'Protect one realistic block of time '
-          'for your health today.';
+      priority =
+          'Protect one realistic block of time for your health today.';
+    } else if (obstacle == 'Low Energy') {
+      priority =
+          'Keep today simple. Prioritize movement, hydration, and recovery.';
+    } else {
+      switch (goal) {
+        case 'build_muscle':
+          priority =
+              'Make your planned training the main physical priority today.';
+          break;
+        case 'lose_fat':
+          priority =
+              'Keep meals structured and stay active without chasing perfection.';
+          break;
+        case 'athletic_performance':
+          priority =
+              'Prioritize training quality and recovery today.';
+          break;
+        case 'improve_fitness':
+          priority =
+              'Get one meaningful block of movement into your day.';
+          break;
+        case 'maintain_weight':
+          priority =
+              'Stay consistent with your normal healthy routine today.';
+          break;
+        default:
+          priority =
+              'Keep the basics steady today: movement, nutrition, hydration, and recovery.';
+      }
     }
 
-    if (obstacle == 'Low Energy') {
-      return 'Keep today simple. Prioritize movement, '
-          'hydration, and recovery.';
+    String? reminder;
+
+    if (sleepHours == 'Less than 5 Hours' ||
+        sleepHours == '5–6 Hours') {
+      reminder =
+          'Recovery may need extra attention today.';
+    } else if (stress == 'High' ||
+        stress == 'Very High') {
+      reminder =
+          'Your stress is usually high. Keep today realistic.';
     }
 
-    switch (_goal) {
-      case 'build_muscle':
-        return 'Make your planned training the main '
-            'physical priority today.';
+    final String morningBrief;
 
-      case 'lose_fat':
-        return 'Keep meals structured and stay active '
-            'without trying to make the day perfect.';
-
-      case 'athletic_performance':
-        return 'Prioritize training quality and recovery '
-            'today.';
-
-      case 'improve_fitness':
-        return 'Get one meaningful block of movement '
-            'into your day.';
-
-      case 'maintain_weight':
-        return 'Stay consistent with your normal healthy '
-            'routine today.';
-
-      default:
-        return 'Keep the basics steady today: movement, '
-            'nutrition, hydration, and recovery.';
+    if (sleepQuality != 'Not set' &&
+        stress != 'Not set') {
+      morningBrief =
+          'Your current goal is $goalLabel. '
+          'Your usual sleep quality is $sleepQuality '
+          'and your daily stress is $stress. '
+          'Today, keep your attention on the few things that matter most.';
+    } else {
+      morningBrief =
+          'Your current goal is $goalLabel. '
+          'Today’s Coach will keep the day simple and point you toward the highest-value actions.';
     }
+
+    return TodayCoachState(
+      morningBrief: morningBrief,
+      priority: priority,
+      reminder: reminder,
+      eveningWrapUp:
+          'Take a quick look at what went well, '
+          'what got in the way, and what may deserve attention tomorrow.',
+    );
   }
 
-  List<_DailySignal> get _dailySignals {
+  List<_DailySignal> get _signals {
     final String workoutTime =
-        _value(
-      _lifestyle,
-      'workout_time',
-    );
-
+        _textValue(_lifestyle, 'workout_time');
     final String water =
-        _value(
-      _lifestyle,
-      'water',
-    );
+        _textValue(_lifestyle, 'water');
+    final String sleepHours =
+        _textValue(_lifestyle, 'sleep_hours');
+    final String eatingStyle =
+        _textValue(_nutrition, 'eating_style');
 
-    final String sleep =
-        _value(
-      _lifestyle,
-      'sleep_hours',
-    );
-
-    final String nutritionStyle =
-        _value(
-      _nutrition,
-      'eating_style',
-    );
-
-    return [
+    return <_DailySignal>[
       _DailySignal(
-        icon:
-            Icons.fitness_center_outlined,
+        icon: Icons.fitness_center_outlined,
         title: 'Training',
-        text: workoutTime == 'Not set'
+        value: workoutTime == 'Not set'
             ? 'Keep your planned movement on the calendar.'
-            : 'Preferred training time: $workoutTime',
+            : 'Preferred time: $workoutTime',
       ),
       _DailySignal(
-        icon:
-            Icons.water_drop_outlined,
+        icon: Icons.water_drop_outlined,
         title: 'Hydration',
-        text: water == 'Not set'
+        value: water == 'Not set'
             ? 'Keep water available throughout the day.'
             : 'Usual intake: $water',
       ),
       _DailySignal(
-        icon:
-            Icons.bedtime_outlined,
+        icon: Icons.bedtime_outlined,
         title: 'Recovery',
-        text: sleep == 'Not set'
+        value: sleepHours == 'Not set'
             ? 'Protect your sleep window tonight.'
-            : 'Usual sleep: $sleep',
+            : 'Usual sleep: $sleepHours',
       ),
       _DailySignal(
-        icon:
-            Icons.restaurant_menu_outlined,
+        icon: Icons.restaurant_menu_outlined,
         title: 'Nutrition',
-        text: nutritionStyle ==
-                'Not set'
+        value: eatingStyle == 'Not set'
             ? 'Keep meals simple and consistent.'
-            : 'Current eating style: $nutritionStyle',
+            : 'Current style: $eatingStyle',
       ),
     ];
   }
 
-  String? get _smartReminder {
-    final String water =
-        _value(
-      _lifestyle,
-      'water',
-      fallback: '',
-    );
+  String get _timeGreeting {
+    final int hour = DateTime.now().hour;
 
-    final String sleep =
-        _value(
-      _lifestyle,
-      'sleep_hours',
-      fallback: '',
-    );
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
 
-    if (water == 'Less than 1 L') {
-      return 'Hydration may need a little more attention today.';
-    }
+  String get _dateLabel {
+    final DateTime now = DateTime.now();
 
-    if (sleep ==
-            'Less than 5 Hours' ||
-        sleep == '5–6 Hours') {
-      return 'Recovery may need extra attention today.';
-    }
+    const List<String> weekdays = <String>[
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
 
-    return null;
+    const List<String> months = <String>[
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return '${weekdays[now.weekday - 1]}, '
+        '${months[now.month - 1]} ${now.day}';
   }
 
   Future<void> _openFoundation() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            const MyFoundationScreen(),
+        builder: (_) => const MyFoundationScreen(),
       ),
     );
 
     if (!mounted) return;
-
     await _loadFoundation();
   }
 
-  void _askCoach() {
+  Future<void> _submitQuestion() async {
     final String question =
-        _questionController.text
-            .trim();
+        _questionController.text.trim();
 
-    if (question.isEmpty) {
-      return;
-    }
+    if (question.isEmpty || _isSendingQuestion) return;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      const SnackBar(
-        content: Text(
-          'AI responses will be connected in the next step.',
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isSendingQuestion = true;
+      _lastQuestion = question;
+      _lastAnswer = null;
+    });
+
+    try {
+      final FunctionResponse response =
+          await Supabase.instance.client.functions.invoke(
+        'todays-coach',
+        body: <String, dynamic>{
+          'question': question,
+          'foundation': _foundation ?? <String, dynamic>{},
+          'dailyContext': <String, dynamic>{
+            'morningBrief': _todayState?.morningBrief,
+            'priority': _todayState?.priority,
+            'reminder': _todayState?.reminder,
+            'eveningWrapUp': _todayState?.eveningWrapUp,
+          },
+        },
+      );
+
+      final dynamic data = response.data;
+
+      String answer;
+
+      if (data is Map && data['answer'] != null) {
+        answer = data['answer'].toString().trim();
+
+        // The backend intentionally returns a normal coach message even when
+        // a request is blocked as out-of-scope. Always surface that message in
+        // the chat instead of replacing it with a generic snackbar/error.
+        if (data['allowed'] == false && answer.isEmpty) {
+          answer =
+              'Today’s Coach is designed specifically for fitness and health. '
+              'I can help with training, recovery, nutrition, hydration, sleep, '
+              'and fitness progress.';
+        }
+      } else if (data is Map && data['error'] != null) {
+        throw Exception(data['error'].toString());
+      } else {
+        throw Exception(
+          'Today’s Coach returned an invalid response.',
+        );
+      }
+
+      if (answer.isEmpty) {
+        throw Exception(
+          'Today’s Coach returned an empty response.',
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _lastAnswer = answer;
+        _isSendingQuestion = false;
+      });
+
+      _questionController.clear();
+    } on FunctionException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSendingQuestion = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Today’s Coach could not answer: '
+            '${error.details ?? error.reasonPhrase ?? error.status}',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSendingQuestion = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not reach Today’s Coach: $error',
+          ),
+        ),
+      );
+    }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          AppTheme.background,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text(
           'Today’s Coach',
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor:
-            AppTheme.background,
-        foregroundColor:
-            AppTheme.textPrimary,
+        backgroundColor: AppTheme.background,
+        foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
       body: _buildBody(),
@@ -394,253 +479,104 @@ class _TodaysCoachScreenState
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child:
-            CircularProgressIndicator(),
+        child: CircularProgressIndicator(),
       );
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding:
-              const EdgeInsets.all(
-            24,
-          ),
-          child: Text(
-            _errorMessage!,
-            textAlign:
-                TextAlign.center,
-            style: const TextStyle(
-              color:
-                  AppTheme.textSecondary,
-            ),
-          ),
-        ),
-      );
+      return _buildErrorState();
     }
 
     if (!_foundationCompleted) {
-      return _buildFoundationRequired();
+      return _buildFoundationRequiredState();
+    }
+
+    if (_todayState == null) {
+      return _buildErrorState(
+        message:
+            'Could not prepare Today’s Coach for this Foundation.',
+      );
     }
 
     return RefreshIndicator(
-      onRefresh:
-          _loadFoundation,
+      onRefresh: _loadFoundation,
       child: ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
-        padding:
-            const EdgeInsets.fromLTRB(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
           24,
           16,
           24,
           32,
         ),
-        children: [
-          Text(
-            _greeting,
-            style:
-                const TextStyle(
-              fontSize: 30,
-              fontWeight:
-                  FontWeight.w800,
-              color:
-                  AppTheme.textPrimary,
-            ),
-          ),
+        children: <Widget>[
+          _buildHeader(),
+          const SizedBox(height: 22),
+          _buildMorningBrief(),
+          const SizedBox(height: 18),
+          _buildPriorityCard(),
 
-          const SizedBox(
-            height: 24,
-          ),
-
-          _CoachCard(
-            icon:
-                Icons.wb_sunny_outlined,
-            title:
-                'Morning Brief',
-            text: _morningBrief,
-          ),
-
-          const SizedBox(
-            height: 16,
-          ),
-
-          _CoachCard(
-            icon: Icons
-                .center_focus_strong_outlined,
-            title:
-                'Today’s Priority',
-            text:
-                _todayPriority,
-            highlighted: true,
-          ),
-
-          if (_smartReminder != null) ...[
-            const SizedBox(
-              height: 16,
-            ),
-
-            _CoachCard(
-              icon: Icons
-                  .notifications_active_outlined,
-              title:
-                  'Smart Reminder',
-              text:
-                  _smartReminder!,
-            ),
+          if (_todayState!.reminder != null) ...[
+            const SizedBox(height: 18),
+            _buildReminderCard(),
           ],
 
-          const SizedBox(
-            height: 28,
+          const SizedBox(height: 28),
+          const _SectionTitle(
+            title: 'Daily Signals',
+            subtitle:
+                'A quick read across the parts of your day that matter.',
           ),
-
-          const Text(
-            'Today at a Glance',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight:
-                  FontWeight.w800,
-              color:
-                  AppTheme.textPrimary,
-            ),
+          const SizedBox(height: 14),
+          _buildSignals(),
+          const SizedBox(height: 28),
+          const _SectionTitle(
+            title: 'Ask Today’s Coach',
+            subtitle:
+                'Ask about fitness, training, recovery, nutrition, hydration, sleep, or fitness progress.',
           ),
-
-          const SizedBox(
-            height: 6,
+          const SizedBox(height: 14),
+          _buildAskCoach(),
+          const SizedBox(height: 28),
+          const _SectionTitle(
+            title: 'Evening Wrap-up',
+            subtitle:
+                'A light check-in, not another task list.',
           ),
-
-          const Text(
-            'A quick coordination of the parts of your day that matter.',
-            style: TextStyle(
-              fontSize: 14,
-              color:
-                  AppTheme.textSecondary,
-            ),
-          ),
-
-          const SizedBox(
-            height: 14,
-          ),
-
-          ..._dailySignals.map(
-            (signal) =>
-                Padding(
-              padding:
-                  const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child:
-                  _DailySignalCard(
-                signal: signal,
-              ),
-            ),
-          ),
-
-          const SizedBox(
-            height: 20,
-          ),
-
-          const Text(
-            'Ask Today’s Coach',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight:
-                  FontWeight.w800,
-              color:
-                  AppTheme.textPrimary,
-            ),
-          ),
-
-          const SizedBox(
-            height: 6,
-          ),
-
-          const Text(
-            'Ask a simple question about today’s health, routine, or priorities.',
-            style: TextStyle(
-              fontSize: 14,
-              color:
-                  AppTheme.textSecondary,
-            ),
-          ),
-
-          const SizedBox(
-            height: 14,
-          ),
-
-          _buildQuestionBox(),
-
-          const SizedBox(
-            height: 28,
-          ),
-
+          const SizedBox(height: 14),
           _buildEveningWrapUp(),
         ],
       ),
     );
   }
 
-  Widget _buildFoundationRequired() {
+  Widget _buildErrorState({
+    String? message,
+  }) {
     return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.all(
-          24,
-        ),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons
-                  .account_tree_outlined,
-              size: 58,
-              color:
-                  AppTheme.primaryGreen,
+              Icons.error_outline,
+              size: 54,
+              color: AppTheme.textSecondary,
             ),
-
-            const SizedBox(
-              height: 18,
-            ),
-
-            const Text(
-              'Complete My Foundation first',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight:
-                    FontWeight.w800,
-                color:
-                    AppTheme.textPrimary,
+            const SizedBox(height: 14),
+            Text(
+              message ?? _errorMessage ?? 'Something went wrong.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppTheme.textSecondary,
               ),
             ),
-
-            const SizedBox(
-              height: 10,
-            ),
-
-            const Text(
-              'Today’s Coach uses your Foundation to understand your goals and daily context.',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                height: 1.5,
-                color:
-                    AppTheme.textSecondary,
-              ),
-            ),
-
-            const SizedBox(
-              height: 22,
-            ),
-
-            FilledButton(
-              onPressed:
-                  _openFoundation,
-              child: const Text(
-                'Open My Foundation',
-              ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _loadFoundation,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -648,50 +584,297 @@ class _TodaysCoachScreenState
     );
   }
 
-  Widget _buildQuestionBox() {
-    return Container(
-      padding:
-          const EdgeInsets.all(
-        16,
-      ),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius:
-            BorderRadius.circular(
-          20,
+  Widget _buildFoundationRequiredState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(
+            maxWidth: 720,
+          ),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: AppTheme.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppTheme.border,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: AppTheme.calorieCard,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_outlined,
+                  color: AppTheme.primaryGreen,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Finish My Foundation first',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Today’s Coach needs your Foundation before it can give useful daily guidance.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: _openFoundation,
+                icon: const Icon(
+                  Icons.account_tree_outlined,
+                ),
+                label: const Text(
+                  'Open My Foundation',
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _timeGreeting,
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          _dateLabel,
+          style: const TextStyle(
+            fontSize: 15,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMorningBrief() {
+    return _CoachCard(
+      icon: Icons.wb_sunny_outlined,
+      title: 'Morning Brief',
+      child: Text(
+        _todayState!.morningBrief,
+        style: const TextStyle(
+          fontSize: 15,
+          height: 1.55,
+          color: AppTheme.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriorityCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppTheme.calorieCard,
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color:
-              AppTheme.border,
+          color: AppTheme.primaryGreen.withValues(
+            alpha: 0.35,
+          ),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Icon(
+            Icons.center_focus_strong_outlined,
+            color: AppTheme.primaryGreen,
+            size: 30,
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: TextField(
-              controller:
-                  _questionController,
-              textInputAction:
-                  TextInputAction.send,
-              onSubmitted: (_) {
-                _askCoach();
-              },
-              decoration:
-                  const InputDecoration(
-                hintText:
-                    'What should I focus on today?',
-                border:
-                    InputBorder.none,
-              ),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Today’s Priority',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _todayState!.priority,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    height: 1.5,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          IconButton.filled(
-            onPressed:
-                _askCoach,
-            icon: const Icon(
-              Icons.arrow_upward,
+  Widget _buildReminderCard() {
+    return _CoachCard(
+      icon: Icons.notifications_active_outlined,
+      title: 'Smart Reminder',
+      child: Text(
+        _todayState!.reminder!,
+        style: const TextStyle(
+          fontSize: 15,
+          height: 1.55,
+          color: AppTheme.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignals() {
+    return LayoutBuilder(
+      builder: (
+        BuildContext context,
+        BoxConstraints constraints,
+      ) {
+        final bool twoColumns =
+            constraints.maxWidth >= 800;
+
+        if (!twoColumns) {
+          return Column(
+            children: _signals
+                .map(
+                  (signal) => Padding(
+                    padding:
+                        const EdgeInsets.only(
+                      bottom: 12,
+                    ),
+                    child: _DailySignalCard(
+                      signal: signal,
+                    ),
+                  ),
+                )
+                .toList(),
+          );
+        }
+
+        return Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: _signals
+              .map(
+                (signal) => SizedBox(
+                  width:
+                      (constraints.maxWidth - 14) / 2,
+                  child: _DailySignalCard(
+                    signal: signal,
+                  ),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildAskCoach() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: AppTheme.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_lastQuestion != null) ...[
+            _ChatBubble(
+              label: 'You',
+              text: _lastQuestion!,
+              isCoach: false,
             ),
+            const SizedBox(height: 10),
+          ],
+          if (_isSendingQuestion) ...[
+            const _CoachThinkingBubble(),
+            const SizedBox(height: 10),
+          ] else if (_lastAnswer != null) ...[
+            _ChatBubble(
+              label: 'Today’s Coach',
+              text: _lastAnswer!,
+              isCoach: true,
+            ),
+            const SizedBox(height: 14),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _questionController,
+                  enabled: !_isSendingQuestion,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) {
+                    if (!_isSendingQuestion) {
+                      _submitQuestion();
+                    }
+                  },
+                  decoration: const InputDecoration(
+                    hintText:
+                        'What should I focus on today?',
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filled(
+                onPressed:
+                    _isSendingQuestion ? null : _submitQuestion,
+                icon: _isSendingQuestion
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.arrow_upward,
+                      ),
+              ),
+            ],
           ),
         ],
       ),
@@ -703,107 +886,221 @@ class _TodaysCoachScreenState
         DateTime.now().hour >= 18;
 
     return _CoachCard(
-      icon:
-          Icons.nights_stay_outlined,
-      title:
-          'Evening Wrap-up',
-      text: evening
-          ? 'Take a quick look at what went well, what got in the way, and what may deserve attention tomorrow.'
-          : 'A very short end-of-day reflection will appear here this evening.',
+      icon: Icons.nights_stay_outlined,
+      title: evening
+          ? 'How did today go?'
+          : 'Check back this evening',
+      child: Text(
+        evening
+            ? _todayState!.eveningWrapUp
+            : 'At the end of the day, Today’s Coach will help you make a quick reflection without turning it into another long form.',
+        style: const TextStyle(
+          fontSize: 15,
+          height: 1.55,
+          color: AppTheme.textSecondary,
+        ),
+      ),
     );
   }
 }
 
-class _CoachCard
-    extends StatelessWidget {
+class _ChatBubble extends StatelessWidget {
+  final String label;
+  final String text;
+  final bool isCoach;
+
+  const _ChatBubble({
+    required this.label,
+    required this.text,
+    required this.isCoach,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment:
+          isCoach ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints: const BoxConstraints(
+          maxWidth: 760,
+        ),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isCoach
+              ? AppTheme.calorieCard
+              : AppTheme.background,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isCoach
+                ? AppTheme.primaryGreen.withValues(alpha: 0.25)
+                : AppTheme.border,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: isCoach
+                    ? AppTheme.primaryGreen
+                    : AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoachThinkingBubble extends StatelessWidget {
+  const _CoachThinkingBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 13,
+        ),
+        decoration: BoxDecoration(
+          color: AppTheme.calorieCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: AppTheme.primaryGreen.withValues(
+              alpha: 0.25,
+            ),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+              ),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Today’s Coach is thinking...',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _SectionTitle({
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.45,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoachCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String text;
-  final bool highlighted;
+  final Widget child;
 
   const _CoachCard({
     required this.icon,
     required this.title,
-    required this.text,
-    this.highlighted = false,
+    required this.child,
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(
-        20,
-      ),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: highlighted
-            ? AppTheme.calorieCard
-            : AppTheme.card,
-        borderRadius:
-            BorderRadius.circular(
-          22,
-        ),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: highlighted
-              ? AppTheme.primaryGreen
-                  .withValues(
-                    alpha: 0.35,
-                  )
-              : AppTheme.border,
+          color: AppTheme.border,
         ),
       ),
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color:
-                AppTheme.primaryGreen,
-            size: 28,
-          ),
-
-          const SizedBox(
-            width: 15,
-          ),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style:
-                      const TextStyle(
-                    fontSize: 18,
-                    fontWeight:
-                        FontWeight.w800,
-                    color: AppTheme
-                        .textPrimary,
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppTheme.calorieCard,
+                  borderRadius:
+                      BorderRadius.circular(14),
                 ),
-
-                const SizedBox(
-                  height: 8,
+                child: Icon(
+                  icon,
+                  color: AppTheme.primaryGreen,
                 ),
-
-                Text(
-                  text,
-                  style:
-                      const TextStyle(
-                    fontSize: 15,
-                    height: 1.5,
-                    color: AppTheme
-                        .textSecondary,
-                  ),
+              ),
+              const SizedBox(width: 13),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
+          child,
         ],
       ),
     );
@@ -813,17 +1110,16 @@ class _CoachCard
 class _DailySignal {
   final IconData icon;
   final String title;
-  final String text;
+  final String value;
 
   const _DailySignal({
     required this.icon,
     required this.title,
-    required this.text,
+    required this.value,
   });
 }
 
-class _DailySignalCard
-    extends StatelessWidget {
+class _DailySignalCard extends StatelessWidget {
   final _DailySignal signal;
 
   const _DailySignalCard({
@@ -831,38 +1127,33 @@ class _DailySignalCard
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(
-        18,
-      ),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color:
-              AppTheme.border,
+          color: AppTheme.border,
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            signal.icon,
-            color:
-                AppTheme.primaryGreen,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppTheme.calorieCard,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(
+              signal.icon,
+              color: AppTheme.primaryGreen,
+            ),
           ),
-
-          const SizedBox(
-            width: 14,
-          ),
-
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -870,28 +1161,19 @@ class _DailySignalCard
               children: [
                 Text(
                   signal.title,
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
-                    fontWeight:
-                        FontWeight.w700,
-                    color: AppTheme
-                        .textPrimary,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
-
-                const SizedBox(
-                  height: 4,
-                ),
-
+                const SizedBox(height: 5),
                 Text(
-                  signal.text,
-                  style:
-                      const TextStyle(
+                  signal.value,
+                  style: const TextStyle(
                     fontSize: 13,
-                    height: 1.4,
-                    color: AppTheme
-                        .textSecondary,
+                    height: 1.45,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ],
