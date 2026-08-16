@@ -17,6 +17,7 @@ dependencies:
   image_picker: ^1.2.3
   http: ^1.6.0
   supabase_flutter: ^2.16.0
+  flutter_svg: ^2.2.0
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +31,6 @@ flutter:
 
   assets:
     - assets/body_types/
+    - assets/exercises/targets/
+    - assets/anatomy/
+    - assets/anatomy_svg/

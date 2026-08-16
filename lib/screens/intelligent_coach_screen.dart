@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
 import 'package:future_project/screens/todays_coach_screen.dart';
+import 'package:future_project/screens/training_plan_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 
 class IntelligentCoachScreen extends StatefulWidget {
@@ -106,6 +107,21 @@ class _IntelligentCoachScreenState
     );
   }
 
+  void _openTrainingPlan() {
+    if (!_foundationCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete My Foundation to unlock Training Plan.'),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TrainingPlanScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -157,6 +173,7 @@ class _IntelligentCoachScreenState
               subtitle:
                   'Your personalized workout program.',
               locked: !_foundationCompleted,
+              onTap: _openTrainingPlan,
             ),
             const SizedBox(height: 14),
             _CoachModuleCard(
