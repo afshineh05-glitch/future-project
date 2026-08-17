@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/exercise_video_player.dart';
-import 'package:future_project/services/exercise_anatomy_service.dart';
 
 class TrainingPlanScreen extends StatefulWidget {
   const TrainingPlanScreen({super.key});
@@ -1408,7 +1407,6 @@ class _ExerciseCard extends StatelessWidget {
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
     final adaptation =
         exercise['intended_adaptation']?.toString().trim() ?? '';
-    final anatomyAsset = ExerciseAnatomyService.assetFor(name);
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),
@@ -1438,37 +1436,19 @@ class _ExerciseCard extends StatelessWidget {
                 border: Border.all(color: AppTheme.border),
               ),
               child: Stack(
-                fit: StackFit.expand,
+                alignment: Alignment.center,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(13),
-                    child: anatomyAsset != null
-                        ? Image.asset(
-                            anatomyAsset,
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                            errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(
-                                Icons.accessibility_new_rounded,
-                                color: AppTheme.primaryGreen,
-                                size: 30,
-                              ),
-                            ),
-                          )
-                        : const Center(
-                            child: Icon(
-                              Icons.accessibility_new_rounded,
-                              color: AppTheme.primaryGreen,
-                              size: 30,
-                            ),
-                          ),
+                  const Icon(
+                    Icons.accessibility_new_rounded,
+                    color: AppTheme.primaryGreen,
+                    size: 30,
                   ),
                   Positioned(
-                    left: 5,
-                    top: 5,
+                    left: 6,
+                    top: 6,
                     child: Container(
-                      width: 22,
-                      height: 22,
+                      width: 20,
+                      height: 20,
                       decoration: const BoxDecoration(
                         color: AppTheme.primaryGreen,
                         shape: BoxShape.circle,
@@ -1479,7 +1459,7 @@ class _ExerciseCard extends StatelessWidget {
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -1627,7 +1607,6 @@ class ExerciseDetailScreen extends StatelessWidget {
     final primary = _stringList(exercise['primary_muscles']);
     final secondary = _stringList(exercise['secondary_muscles']);
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
-    final anatomyAsset = ExerciseAnatomyService.assetFor(name);
 
     return DefaultTabController(
       length: 5,
@@ -1700,8 +1679,6 @@ class ExerciseDetailScreen extends StatelessWidget {
                           effect: effect,
                         ),
                         _MusclesTab(
-                          exerciseName: name,
-                          anatomyAsset: anatomyAsset,
                           primary: primary,
                           secondary: secondary,
                         ),
@@ -1912,14 +1889,10 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _MusclesTab extends StatelessWidget {
-  final String exerciseName;
-  final String? anatomyAsset;
   final List<String> primary;
   final List<String> secondary;
 
   const _MusclesTab({
-    required this.exerciseName,
-    required this.anatomyAsset,
     required this.primary,
     required this.secondary,
   });
@@ -1933,89 +1906,42 @@ class _MusclesTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.track_changes_rounded,
-                    color: AppTheme.primaryGreen,
-                  ),
-                  SizedBox(width: 9),
-                  Text(
-                    'Muscles Worked',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
+              const Text(
+                'Target Muscles',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-              const SizedBox(height: 14),
-              if (anatomyAsset != null)
-                Container(
-                  width: double.infinity,
-                  constraints: const BoxConstraints(maxHeight: 470),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset(
-                    anatomyAsset!,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => _FallbackBodyMaps(
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _BodyMapCard(
+                      label: 'Front',
+                      isBack: false,
                       primary: primary,
                       secondary: secondary,
                     ),
                   ),
-                )
-              else
-                _FallbackBodyMaps(
-                  primary: primary,
-                  secondary: secondary,
-                ),
-              const SizedBox(height: 16),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _BodyMapCard(
+                      label: 'Back',
+                      isBack: true,
+                      primary: primary,
+                      secondary: secondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
               _MuscleLegend(
                 primary: primary,
                 secondary: secondary,
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FallbackBodyMaps extends StatelessWidget {
-  final List<String> primary;
-  final List<String> secondary;
-
-  const _FallbackBodyMaps({
-    required this.primary,
-    required this.secondary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _BodyMapCard(
-            label: 'Front',
-            isBack: false,
-            primary: primary,
-            secondary: secondary,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _BodyMapCard(
-            label: 'Back',
-            isBack: true,
-            primary: primary,
-            secondary: secondary,
           ),
         ),
       ],
