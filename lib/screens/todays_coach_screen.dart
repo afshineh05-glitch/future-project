@@ -137,11 +137,6 @@ class _TodaysCoachScreenState
   bool get _foundationCompleted =>
       _foundation?['is_completed'] == true;
 
-  Map<String, dynamic> get _lifestyle =>
-      _asMap(_foundation?['lifestyle']);
-
-  Map<String, dynamic> get _nutrition =>
-      _asMap(_foundation?['nutrition']);
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
       return value;

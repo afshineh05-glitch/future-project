@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/theme/app_theme.dart';
+import 'package:future_project/widgets/exercise_video_player.dart';
 
 class TrainingPlanScreen extends StatefulWidget {
   const TrainingPlanScreen({super.key});
@@ -1239,7 +1240,7 @@ class ExerciseDetailScreen extends StatelessWidget {
     final secondary = _stringList(exercise['secondary_muscles']);
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: AppTheme.background,
         appBar: AppBar(
@@ -1290,6 +1291,7 @@ class ExerciseDetailScreen extends StatelessWidget {
                       tabs: [
                         Tab(text: 'Overview'),
                         Tab(text: 'Muscles'),
+                        Tab(text: 'Video'),
                         Tab(text: 'How to Perform'),
                         Tab(text: 'Tips'),
                       ],
@@ -1309,6 +1311,11 @@ class ExerciseDetailScreen extends StatelessWidget {
                         _MusclesTab(
                           primary: primary,
                           secondary: secondary,
+                        ),
+                        _VideoTab(
+                          name: name,
+                          videoUrl:
+                              exercise['video_url']?.toString(),
                         ),
                         _HowToTab(name: name),
                         const _TipsTab(),
@@ -1859,6 +1866,29 @@ class _LegendTitle extends StatelessWidget {
             fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VideoTab extends StatelessWidget {
+  final String name;
+  final String? videoUrl;
+
+  const _VideoTab({
+    required this.name,
+    required this.videoUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        ExerciseVideoPlayer(
+          exerciseName: name,
+          existingVideoUrl: videoUrl,
         ),
       ],
     );
