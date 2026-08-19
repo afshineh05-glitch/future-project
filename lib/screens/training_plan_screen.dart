@@ -5,6 +5,18 @@ import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/exercise_video_player.dart';
 import 'package:future_project/services/exercise_anatomy_service.dart';
 
+String _normalizeExerciseLookup(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll('—', ' ')
+      .replaceAll('–', ' ')
+      .replaceAll('-', ' ')
+      .replaceAll(RegExp(r'[^a-z0-9() ]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
 class TrainingPlanScreen extends StatefulWidget {
   const TrainingPlanScreen({super.key});
 
@@ -68,7 +80,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
           .select(
             'id, day_number, title, focus, session_strategy, '
             'training_exercises('
-            'id, exercise_name, sets, reps, suggested_weight, weight_unit, '
+            'id, exercise_id, exercise_name, sets, reps, suggested_weight, weight_unit, '
             'rest_seconds, exercise_order, video_url, '
             'primary_muscles, secondary_muscles, '
             'exercise_effect, selection_reason, order_reason, intended_adaptation'
@@ -77,11 +89,106 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
           .eq('plan_id', p['id'])
           .order('day_number');
 
+      final libraryRaw = await s
+          .from('exercise_library')
+          .select(
+            'exercise_id, exercise_name, primary_muscles, secondary_muscles, '
+            'anatomy_asset, exercise_effect, video_url',
+          )
+          .eq('is_active', true);
+
+      final Map<String, Map<String, dynamic>> libraryById =
+          <String, Map<String, dynamic>>{};
+
+      final List<Map<String, dynamic>> libraryRows =
+          (libraryRaw as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+
+      for (final item in libraryRows) {
+        final id = item['exercise_id']?.toString().trim() ?? '';
+        if (id.isNotEmpty) {
+          libraryById[id] = item;
+        }
+      }
+
+      Map<String, dynamic>? findLibraryItem(
+        Map<String, dynamic> exercise,
+      ) {
+        final exerciseId =
+            exercise['exercise_id']?.toString().trim() ?? '';
+
+        if (exerciseId.isNotEmpty && libraryById.containsKey(exerciseId)) {
+          return libraryById[exerciseId];
+        }
+
+        final generatedName =
+            _normalizeExerciseLookup(
+          exercise['exercise_name']?.toString() ?? '',
+        );
+
+        if (generatedName.isEmpty) return null;
+
+        Map<String, dynamic>? bestMatch;
+        int bestLength = 0;
+
+        for (final item in libraryRows) {
+          final libraryName =
+              _normalizeExerciseLookup(
+            item['exercise_name']?.toString() ?? '',
+          );
+
+          if (libraryName.isEmpty) continue;
+
+          final exact = generatedName == libraryName;
+          final generatedExtendsLibrary =
+              generatedName.startsWith('$libraryName ') ||
+              generatedName.startsWith('$libraryName(');
+
+          if ((exact || generatedExtendsLibrary) &&
+              libraryName.length > bestLength) {
+            bestMatch = item;
+            bestLength = libraryName.length;
+          }
+        }
+
+        return bestMatch;
+      }
+
       final loaded = (raw as List).map((e) {
         final d = Map<String, dynamic>.from(e as Map);
 
         final ex = ((d['training_exercises'] as List?) ?? [])
-            .map((x) => Map<String, dynamic>.from(x as Map))
+            .map((x) {
+              final exercise = Map<String, dynamic>.from(x as Map);
+              final libraryItem = findLibraryItem(exercise);
+
+              if (libraryItem != null) {
+                exercise['exercise_id'] =
+                    libraryItem['exercise_id'];
+                exercise['canonical_exercise_name'] =
+                    libraryItem['exercise_name'];
+                exercise['primary_muscles'] =
+                    libraryItem['primary_muscles'] ??
+                        exercise['primary_muscles'];
+                exercise['secondary_muscles'] =
+                    libraryItem['secondary_muscles'] ??
+                        exercise['secondary_muscles'];
+                exercise['anatomy_asset'] =
+                    libraryItem['anatomy_asset'];
+                exercise['exercise_effect'] =
+                    libraryItem['exercise_effect'] ??
+                        exercise['exercise_effect'];
+                exercise['video_url'] =
+                    libraryItem['video_url'] ??
+                        exercise['video_url'];
+                exercise['library_matched'] = true;
+              } else {
+                exercise['library_matched'] = false;
+              }
+
+              return exercise;
+            })
             .toList()
           ..sort(
             (a, b) =>
@@ -310,7 +417,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
                   label: Text(
                     _isAdjusting
                         ? 'Adjusting...'
-                        : 'Adjust My Plan',
+                        : 'Adjust Plan',
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                     ),
@@ -1408,7 +1515,12 @@ class _ExerciseCard extends StatelessWidget {
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
     final adaptation =
         exercise['intended_adaptation']?.toString().trim() ?? '';
-    final anatomyAsset = ExerciseAnatomyService.assetFor(name);
+    final libraryAnatomy =
+        exercise['anatomy_asset']?.toString().trim();
+    final anatomyAsset =
+        libraryAnatomy != null && libraryAnatomy.isNotEmpty
+            ? libraryAnatomy
+            : ExerciseAnatomyService.assetFor(name);
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),
@@ -1462,27 +1574,6 @@ class _ExerciseCard extends StatelessWidget {
                               size: 30,
                             ),
                           ),
-                  ),
-                  Positioned(
-                    left: 5,
-                    top: 5,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.primaryGreen,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$number',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -1627,7 +1718,12 @@ class ExerciseDetailScreen extends StatelessWidget {
     final primary = _stringList(exercise['primary_muscles']);
     final secondary = _stringList(exercise['secondary_muscles']);
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
-    final anatomyAsset = ExerciseAnatomyService.assetFor(name);
+    final libraryAnatomy =
+        exercise['anatomy_asset']?.toString().trim();
+    final anatomyAsset =
+        libraryAnatomy != null && libraryAnatomy.isNotEmpty
+            ? libraryAnatomy
+            : ExerciseAnatomyService.assetFor(name);
 
     return DefaultTabController(
       length: 5,
@@ -1683,7 +1779,7 @@ class ExerciseDetailScreen extends StatelessWidget {
                         Tab(text: 'Muscles'),
                         Tab(text: 'Video'),
                         Tab(text: 'How to Perform'),
-                        Tab(text: 'Tips'),
+                        Tab(text: 'Effect'),
                       ],
                     ),
                   ),
@@ -1697,7 +1793,6 @@ class ExerciseDetailScreen extends StatelessWidget {
                           name: name,
                           primary: primary,
                           secondary: secondary,
-                          effect: effect,
                         ),
                         _MusclesTab(
                           exerciseName: name,
@@ -1711,7 +1806,9 @@ class ExerciseDetailScreen extends StatelessWidget {
                               exercise['video_url']?.toString(),
                         ),
                         _HowToTab(name: name),
-                        const _TipsTab(),
+                        _EffectTab(
+                          effect: effect,
+                        ),
                       ],
                     ),
                   ),
@@ -1835,13 +1932,11 @@ class _OverviewTab extends StatelessWidget {
   final String name;
   final List<String> primary;
   final List<String> secondary;
-  final String effect;
 
   const _OverviewTab({
     required this.name,
     required this.primary,
     required this.secondary,
-    required this.effect,
   });
 
   @override
@@ -1875,32 +1970,6 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
-        if (effect.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Training Effect',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  effect,
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    height: 1.55,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
         _MuscleLegend(
           primary: primary,
@@ -2420,11 +2489,17 @@ class _HowToTab extends StatelessWidget {
   }
 }
 
-class _TipsTab extends StatelessWidget {
-  const _TipsTab();
+class _EffectTab extends StatelessWidget {
+  final String effect;
+
+  const _EffectTab({
+    required this.effect,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final value = effect.trim();
+
     return ListView(
       physics: const NeverScrollableScrollPhysics(),
       children: [
@@ -2432,30 +2507,34 @@ class _TipsTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Row(
+                children: [
+                  Icon(
+                    Icons.auto_graph_rounded,
+                    color: AppTheme.primaryGreen,
+                  ),
+                  SizedBox(width: 9),
+                  Text(
+                    'Training Effect',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               Text(
-                'Coach Tips',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+                value.isNotEmpty
+                    ? value
+                    : 'Training effect will appear once this exercise is fully mapped in the Exercise Library.',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  height: 1.55,
+                  fontWeight: FontWeight.w600,
                 ),
-              ),
-              SizedBox(height: 14),
-              _Tip(
-                icon: Icons.speed_rounded,
-                text: 'Do not rush the repetition. Control matters more than momentum.',
-              ),
-              _Tip(
-                icon: Icons.air_rounded,
-                text: 'Avoid holding your breath through the entire set.',
-              ),
-              _Tip(
-                icon: Icons.shield_outlined,
-                text: 'Stop if you feel sharp pain or unusual joint discomfort.',
-              ),
-              _Tip(
-                icon: Icons.tune_rounded,
-                text: 'Use a load that lets you keep good technique across the target rep range.',
               ),
             ],
           ),
@@ -2464,6 +2543,7 @@ class _TipsTab extends StatelessWidget {
     );
   }
 }
+
 
 class _Step extends StatelessWidget {
   final int number;

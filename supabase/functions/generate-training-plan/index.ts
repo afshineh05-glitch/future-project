@@ -362,15 +362,6 @@ ADJUSTMENT RULES:
 - Keep the same number of training days unless the user's time constraint truly requires otherwise.
 - Do not restart the user's training philosophy from scratch.
 
-OUTPUT EFFICIENCY:
-- Return the complete updated plan because the app replaces the saved plan with this response.
-- Keep unchanged content concise and as close as possible to the current plan.
-- Do not add commentary, markdown, headings, notes, or explanations outside the required JSON fields.
-- Keep selection_reason and order_reason to one short sentence each.
-- Keep exercise_effect to one short professional sentence.
-- Keep session_strategy concise.
-- Do not repeat the same idea across multiple fields.
-
 CORE PRODUCT RULES:
 - Keep the program structurally stable for the full ${cycleWeeks}-week cycle.
 - Generate exactly ${trainingDays} training days.
@@ -615,12 +606,7 @@ Return only the structured plan.
           adjustment_request: adjustment,
           saved_training_strategy: savedStrategy,
         }),
-        max_output_tokens:
-          mode === "adjust"
-            ? 10000
-            : savedStrategy
-            ? 7500
-            : 7000,
+        max_output_tokens: savedStrategy ? 5200 : 4500,
         text: {
           format: {
             type: "json_schema",
@@ -651,7 +637,6 @@ Return only the structured plan.
     console.error(
       "OpenAI Training Plan incomplete:",
       JSON.stringify({
-        mode,
         incomplete_details: data?.incomplete_details,
         usage: data?.usage,
         output_text_length:
@@ -868,7 +853,7 @@ Deno.serve(async (req) => {
         + "training_days("
         + "id, day_number, title, focus, strategy_reason, "
         + "training_exercises("
-        + "id, exercise_name, sets, reps, suggested_weight, weight_unit, rest_seconds, exercise_order, video_url, primary_muscles, secondary_muscles, selection_reason, order_reason, intended_adaptation, exercise_effect"
+        + "id, exercise_id, exercise_name, sets, reps, suggested_weight, weight_unit, rest_seconds, exercise_order, video_url, primary_muscles, secondary_muscles, selection_reason, order_reason, intended_adaptation, exercise_effect"
         + ")"
         + ")",
       )
@@ -1179,6 +1164,39 @@ Deno.serve(async (req) => {
 
     let planId: string | null = null;
 
+    const {
+      data: exerciseLibraryRows,
+      error: exerciseLibraryError,
+    } = await admin
+      .from("exercise_library")
+      .select("exercise_id, exercise_name")
+      .eq("is_active", true);
+
+    if (exerciseLibraryError) {
+      console.error(
+        "Exercise Library lookup error:",
+        exerciseLibraryError.message,
+      );
+    }
+
+    const exerciseIdByName = new Map<string, string>();
+
+    for (const item of exerciseLibraryRows ?? []) {
+      const normalizedName = normalizeExerciseName(
+        item.exercise_name,
+      );
+      const exerciseId = String(
+        item.exercise_id ?? "",
+      ).trim();
+
+      if (normalizedName && exerciseId) {
+        exerciseIdByName.set(
+          normalizedName,
+          exerciseId,
+        );
+      }
+    }
+
     try {
       const {
         data: insertedPlan,
@@ -1302,6 +1320,12 @@ Deno.serve(async (req) => {
                   exercise.exercise_name ??
                     "",
                 ).trim(),
+              exercise_id:
+                exerciseIdByName.get(
+                  normalizeExerciseName(
+                    exercise.exercise_name,
+                  ),
+                ) ?? null,
               sets:
                 Number(
                   exercise.sets,
@@ -1351,10 +1375,6 @@ Deno.serve(async (req) => {
               intended_adaptation:
                 String(
                   exercise.intended_adaptation ?? "",
-                ).trim() || null,
-              exercise_effect:
-                String(
-                  exercise.exercise_effect ?? "",
                 ).trim() || null,
             }),
           );

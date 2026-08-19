@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
+import 'package:future_project/screens/nutrition_home_screen.dart';
 import 'package:future_project/screens/todays_coach_screen.dart';
 import 'package:future_project/screens/training_plan_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
@@ -10,12 +11,10 @@ class IntelligentCoachScreen extends StatefulWidget {
   const IntelligentCoachScreen({super.key});
 
   @override
-  State<IntelligentCoachScreen> createState() =>
-      _IntelligentCoachScreenState();
+  State<IntelligentCoachScreen> createState() => _IntelligentCoachScreenState();
 }
 
-class _IntelligentCoachScreenState
-    extends State<IntelligentCoachScreen> {
+class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
   bool _isLoadingFoundation = true;
   int _foundationProgress = 0;
   bool _foundationCompleted = false;
@@ -66,11 +65,7 @@ class _IntelligentCoachScreenState
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not load My Foundation status.',
-          ),
-        ),
+        const SnackBar(content: Text('Could not load My Foundation status.')),
       );
     }
   }
@@ -78,9 +73,7 @@ class _IntelligentCoachScreenState
   Future<void> _openFoundation() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const MyFoundationScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const MyFoundationScreen()),
     );
 
     if (!mounted) return;
@@ -91,9 +84,7 @@ class _IntelligentCoachScreenState
     if (!_foundationCompleted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Complete My Foundation to unlock Today’s Coach.',
-          ),
+          content: Text('Complete My Foundation to unlock Today’s Coach.'),
         ),
       );
       return;
@@ -101,9 +92,7 @@ class _IntelligentCoachScreenState
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const TodaysCoachScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const TodaysCoachScreen()),
     );
   }
 
@@ -122,6 +111,21 @@ class _IntelligentCoachScreenState
     );
   }
 
+  void _openNutrition() {
+    if (!_foundationCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete My Foundation to unlock Nutrition.'),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NutritionHomeScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,9 +133,7 @@ class _IntelligentCoachScreenState
       appBar: AppBar(
         title: const Text(
           'Intelligent Coach',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.textPrimary,
@@ -145,10 +147,7 @@ class _IntelligentCoachScreenState
           children: [
             const Text(
               'Build the coach that understands you.',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
+              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
             _FoundationCard(
@@ -161,8 +160,7 @@ class _IntelligentCoachScreenState
             _CoachModuleCard(
               icon: Icons.auto_awesome_outlined,
               title: 'Today’s Coach',
-              subtitle:
-                  'Daily guidance based on your progress.',
+              subtitle: 'Daily guidance based on your progress.',
               locked: !_foundationCompleted,
               onTap: _openTodaysCoach,
             ),
@@ -170,8 +168,7 @@ class _IntelligentCoachScreenState
             _CoachModuleCard(
               icon: Icons.fitness_center_outlined,
               title: 'Training Plan',
-              subtitle:
-                  'Your personalized workout program.',
+              subtitle: 'Your personalized workout program.',
               locked: !_foundationCompleted,
               onTap: _openTrainingPlan,
             ),
@@ -179,32 +176,29 @@ class _IntelligentCoachScreenState
             _CoachModuleCard(
               icon: Icons.restaurant_menu_outlined,
               title: 'Nutrition Plan',
-              subtitle:
-                  'Meals and nutrition for your goal.',
+              subtitle: 'Meals and nutrition for your goal.',
               locked: !_foundationCompleted,
+              onTap: _openNutrition,
             ),
             const SizedBox(height: 14),
             _CoachModuleCard(
               icon: Icons.insights_outlined,
               title: 'Progress',
-              subtitle:
-                  'Track measurements and performance.',
+              subtitle: 'Track measurements and performance.',
               locked: !_foundationCompleted,
             ),
             const SizedBox(height: 14),
             _CoachModuleCard(
               icon: Icons.chat_bubble_outline,
               title: 'Chat with Coach',
-              subtitle:
-                  'Ask your AI Coach anything.',
+              subtitle: 'Ask your AI Coach anything.',
               locked: !_foundationCompleted,
             ),
             const SizedBox(height: 14),
             const _CoachModuleCard(
               icon: Icons.settings_outlined,
               title: 'Coach Settings',
-              subtitle:
-                  'Adjust coaching style and preferences.',
+              subtitle: 'Adjust coaching style and preferences.',
               locked: false,
             ),
             const SizedBox(height: 32),
@@ -230,8 +224,7 @@ class _FoundationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double progressValue =
-        progress.clamp(0, 100) / 100;
+    final double progressValue = progress.clamp(0, 100) / 100;
 
     return Material(
       color: Colors.transparent,
@@ -244,14 +237,10 @@ class _FoundationCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppTheme.primaryGreen,
-              width: 1.5,
-            ),
+            border: Border.all(color: AppTheme.primaryGreen, width: 1.5),
           ),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -260,8 +249,7 @@ class _FoundationCard extends StatelessWidget {
                     height: 58,
                     decoration: BoxDecoration(
                       color: AppTheme.calorieCard,
-                      borderRadius:
-                          BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: const Icon(
                       Icons.account_tree_outlined,
@@ -274,17 +262,14 @@ class _FoundationCard extends StatelessWidget {
 
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'My Foundation',
                           style: TextStyle(
                             fontSize: 21,
-                            fontWeight:
-                                FontWeight.w800,
-                            color:
-                                AppTheme.textPrimary,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 5),
@@ -292,12 +277,11 @@ class _FoundationCard extends StatelessWidget {
                           loading
                               ? 'Checking your Foundation...'
                               : completed
-                                  ? 'Your foundation is complete.'
-                                  : 'Teach Future about yourself.',
+                              ? 'Your foundation is complete.'
+                              : 'Teach Future about yourself.',
                           style: const TextStyle(
                             fontSize: 14,
-                            color:
-                                AppTheme.textSecondary,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ],
@@ -321,8 +305,8 @@ class _FoundationCard extends StatelessWidget {
                       loading
                           ? 'Loading...'
                           : completed
-                              ? 'Completed'
-                              : '$progress% complete',
+                          ? 'Completed'
+                          : '$progress% complete',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -336,8 +320,8 @@ class _FoundationCard extends StatelessWidget {
                     loading
                         ? ''
                         : completed
-                            ? 'Edit'
-                            : 'Continue',
+                        ? 'Edit'
+                        : 'Continue',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -355,12 +339,11 @@ class _FoundationCard extends StatelessWidget {
                   value: loading
                       ? null
                       : completed
-                          ? 1
-                          : progressValue,
+                      ? 1
+                      : progressValue,
                   minHeight: 9,
                   backgroundColor: AppTheme.border,
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(
+                  valueColor: const AlwaysStoppedAnimation<Color>(
                     AppTheme.primaryGreen,
                   ),
                 ),
@@ -401,9 +384,7 @@ class _CoachModuleCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppTheme.border,
-            ),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Row(
             children: [
@@ -436,9 +417,7 @@ class _CoachModuleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      locked
-                          ? 'Complete My Foundation to unlock.'
-                          : subtitle,
+                      locked ? 'Complete My Foundation to unlock.' : subtitle,
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppTheme.textSecondary,
@@ -448,9 +427,7 @@ class _CoachModuleCard extends StatelessWidget {
                 ),
               ),
               Icon(
-                locked
-                    ? Icons.lock_outline
-                    : Icons.arrow_forward_ios,
+                locked ? Icons.lock_outline : Icons.arrow_forward_ios,
                 size: 19,
                 color: AppTheme.textSecondary,
               ),

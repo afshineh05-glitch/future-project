@@ -36,3 +36,8 @@ flutter:
     - assets/anatomy/
     - assets/anatomy_svg/
     - assets/exercises/anatomy/
+    - assets/nutrition/foods/
+    - assets/nutrition/recipes/
+    - assets/nutrition/shakes/
+    - assets/nutrition/supplements/
+    - assets/nutrition/offers/

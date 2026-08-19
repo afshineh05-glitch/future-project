@@ -991,9 +991,6 @@ class _TodaysCoachScreenState
           _buildHeader(),
           const SizedBox(height: 22),
           _buildMorningBrief(),
-          const SizedBox(height: 18),
-          _buildPriorityCard(),
-
           if (_todayState!.reminder != null) ...[
             const SizedBox(height: 18),
             _buildReminderCard(),
@@ -1006,14 +1003,6 @@ class _TodaysCoachScreenState
           ),
           const SizedBox(height: 14),
           _buildAskCoach(),
-          const SizedBox(height: 28),
-          const _SectionTitle(
-            title: 'Evening Wrap-up',
-            subtitle:
-                'A light check-in, not another task list.',
-          ),
-          const SizedBox(height: 14),
-          _buildEveningWrapUp(),
         ],
       ),
     );
