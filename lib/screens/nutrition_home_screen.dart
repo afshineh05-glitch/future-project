@@ -1,37 +1,39 @@
 import 'package:flutter/material.dart';
 
+import 'package:future_project/models/food_visual.dart';
+import 'package:future_project/models/cook_for_goal_recipe.dart';
+import 'package:future_project/models/meal_builder_result.dart';
 import 'package:future_project/models/nutrition_profile.dart';
+import 'package:future_project/models/nutrition_food_log.dart';
+import 'package:future_project/models/performance_fuel.dart';
+import 'package:future_project/models/recovery_nutrition.dart';
+import 'package:future_project/models/smart_supplement.dart';
+import 'package:future_project/screens/calorie_scanner_screen.dart';
+import 'package:future_project/screens/cook_for_goal_recipe_screen.dart';
 import 'package:future_project/screens/nutrition_profile_screen.dart';
+import 'package:future_project/services/food_visual_service.dart';
+import 'package:future_project/services/cook_for_goal_recipe_service.dart';
+import 'package:future_project/services/meal_builder_substitution_service.dart';
+import 'package:future_project/services/nutrition_engine_service.dart';
+import 'package:future_project/services/nutrition_food_log_service.dart';
 import 'package:future_project/services/nutrition_profile_service.dart';
+import 'package:future_project/services/recovery_nutrition_service.dart';
+import 'package:future_project/services/smart_supplement_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/nutrition_asset_image.dart';
+import 'package:future_project/widgets/smart_supplement_section.dart';
 
 class NutritionHomeScreen extends StatefulWidget {
   const NutritionHomeScreen({super.key});
 
-  // Demo-only presentation data. Replace this single object with Nutrition
-  // Intelligence data when the engine and tracking layer are available.
+  // Demo-only presentation data for Nutrition sections not connected yet.
   static const _NutritionDemoData _demo = _NutritionDemoData(
-    goal: 'Build Muscle',
-    metrics: [
-      _NutritionMetric('Calories', 1460, 2400, 'kcal'),
-      _NutritionMetric('Protein', 112, 180, 'g'),
-      _NutritionMetric('Carbs', 158, 275, 'g'),
-      _NutritionMetric('Fat', 48, 75, 'g'),
-      _NutritionMetric('Fiber', 21, 32, 'g'),
-      _NutritionMetric('Hydration', 1.8, 3.2, 'L'),
-    ],
-    workout: 'Chest Day',
-    caloriesBurned: 350,
-    recoveryProtein: '35–40 g',
-    recoveryCarbs: '50–70 g',
-    recoveryHydration: '~700 ml',
     mealBuilder: _MealBuilderDemo(
       calories: 500,
       protein: 40,
       carbs: 60,
       proteinSources: [
-        'Chicken',
+        'Chicken Breast',
         'Turkey',
         'Eggs',
         'Greek yogurt',
@@ -47,47 +49,6 @@ class NutritionHomeScreen extends StatefulWidget {
       ],
       fatSources: ['Olive oil', 'Avocado', 'Nuts', 'Seeds'],
     ),
-    recipes: [
-      _RecipeDemo(
-        'Chicken Rice Bowl',
-        510,
-        42,
-        25,
-        'assets/nutrition/recipes/chicken_rice_bowl.png',
-      ),
-      _RecipeDemo(
-        'Greek Yogurt Protein Bowl',
-        360,
-        30,
-        10,
-        'assets/nutrition/recipes/greek_yogurt_protein_bowl.png',
-      ),
-      _RecipeDemo(
-        'Salmon & Potato Plate',
-        560,
-        38,
-        35,
-        'assets/nutrition/recipes/salmon_potato_plate.png',
-      ),
-    ],
-    supplements: [
-      _SupplementDemo(
-        name: 'Creatine',
-        supports: 'Strength, power, and repeated training performance.',
-        relevance: 'May complement your muscle-building training goal.',
-        foodFirst: 'Small amounts occur naturally in meat and fish.',
-        assetPath: 'assets/nutrition/supplements/creatine.png',
-        icon: Icons.fitness_center_outlined,
-      ),
-      _SupplementDemo(
-        name: 'Omega-3',
-        supports: 'General cardiovascular health and recovery.',
-        relevance: 'Worth considering when oily fish intake is limited.',
-        foodFirst: 'Start with salmon, sardines, trout, chia, or walnuts.',
-        assetPath: 'assets/nutrition/supplements/omega_3.png',
-        icon: Icons.water_outlined,
-      ),
-    ],
     offers: [
       _MemberOfferDemo(
         'Nutrition essentials',
@@ -108,9 +69,45 @@ class NutritionHomeScreen extends StatefulWidget {
 
 class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
   final _profileService = NutritionProfileService();
+  final _nutritionEngineService = NutritionEngineService();
+  final _foodLogService = NutritionFoodLogService();
+  final _mealSubstitutionService = const MealBuilderSubstitutionService();
+  final _recoveryNutritionService = RecoveryNutritionService();
+  final _cookForGoalService = const CookForGoalRecipeService(
+    provider: LocalCookForGoalRecipeProvider(),
+  );
+  final _smartSupplementService = const SmartSupplementService();
   NutritionProfile? _profile;
+  PerformanceFuel? _performanceFuel;
+  NutritionFoodDay? _todayFood;
+  MealBuilderResult? _mealBuilderResult;
+  RecoveryNutritionContext? _recoveryContext;
+  List<RankedCookForGoalRecipe> _cookForGoalRecipes = const [];
+  List<SmartSupplementRecommendation> _smartSupplements = const [];
+  final Set<int> _refreshingRecipeIndexes = {};
+  RecoveryWorkoutSource _recoverySource = RecoveryWorkoutSource.trainingPlan;
+  String _differentWorkoutType = 'Strength Training';
+  int _differentWorkoutDuration = 45;
+  RecoveryWorkoutIntensity _differentWorkoutIntensity =
+      RecoveryWorkoutIntensity.moderate;
+  bool _recoverySelectionInitialized = false;
+  bool _recoverySelectionUserModified = false;
   bool _isLoadingProfile = true;
+  bool _isLoadingPerformanceFuel = true;
+  bool _isLoadingTodayFood = true;
+  bool _isBuildingMeal = false;
+  bool _isLoadingRecovery = true;
+  bool _isLoadingRecipes = true;
+  bool _isLoadingSupplements = true;
+  final Map<int, int> _mealAlternativeIndexes = {};
   String? _profileError;
+  String? _performanceFuelError;
+  String? _todayFoodError;
+  String? _mealBuilderError;
+  String? _recoveryError;
+  String? _recipeError;
+  String? _supplementError;
+  int _recipeRequestId = 0;
 
   _NutritionDemoData get _demo => NutritionHomeScreen._demo;
 
@@ -135,6 +132,10 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
         _profile = profile;
         _isLoadingProfile = false;
       });
+      if (profile != null) {
+        _loadPerformanceFuel();
+        _loadTodayFood();
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -142,6 +143,393 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
         _isLoadingProfile = false;
       });
     }
+  }
+
+  Future<void> _loadPerformanceFuel() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingPerformanceFuel = true;
+        _performanceFuelError = null;
+      });
+    }
+    try {
+      final performanceFuel = await _nutritionEngineService
+          .loadPerformanceFuel();
+      if (!mounted) return;
+      setState(() {
+        _performanceFuel = performanceFuel;
+        _isLoadingPerformanceFuel = false;
+      });
+      _loadRecoveryNutrition();
+      _refreshCookForGoal();
+      _refreshSmartSupplements();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _performanceFuelError = error.toString();
+        _isLoadingPerformanceFuel = false;
+      });
+      _loadRecoveryNutrition();
+      _refreshCookForGoal();
+      _refreshSmartSupplements();
+    }
+  }
+
+  Future<void> _loadRecoveryNutrition() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingRecovery = true;
+        _recoveryError = null;
+      });
+    }
+    try {
+      final recoveryContext = await _recoveryNutritionService.loadContext(
+        fuel: _performanceFuel,
+      );
+      if (!mounted) return;
+      setState(() {
+        _recoveryContext = recoveryContext;
+        if (!_recoverySelectionInitialized && !_recoverySelectionUserModified) {
+          _recoverySource = recoveryContext.savedSource;
+          final savedWorkout = recoveryContext.savedDifferentWorkout;
+          if (savedWorkout != null) {
+            _differentWorkoutType = savedWorkout.type;
+            _differentWorkoutDuration = savedWorkout.durationMinutes;
+            _differentWorkoutIntensity = savedWorkout.intensity;
+          }
+          _recoverySelectionInitialized = true;
+        }
+        _isLoadingRecovery = false;
+      });
+      _refreshCookForGoal();
+      _refreshSmartSupplements();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _recoveryError = error.toString();
+        _isLoadingRecovery = false;
+      });
+      _refreshSmartSupplements();
+    }
+  }
+
+  RecoveryWorkout get _differentRecoveryWorkout => RecoveryWorkout(
+    name: _differentWorkoutType,
+    type: _differentWorkoutType,
+    durationMinutes: _differentWorkoutDuration,
+    intensity: _differentWorkoutIntensity,
+    exerciseCount: null,
+    isScheduledWorkout: true,
+  );
+
+  Future<void> _setRecoverySource(RecoveryWorkoutSource source) async {
+    setState(() {
+      _recoverySource = source;
+      _recoverySelectionInitialized = true;
+      _recoverySelectionUserModified = true;
+    });
+    _refreshCookForGoal();
+    _refreshSmartSupplements();
+    await _persistRecoverySelection();
+  }
+
+  Future<void> _setDifferentWorkoutType(String value) async {
+    setState(() {
+      _differentWorkoutType = value;
+      _recoverySelectionInitialized = true;
+      _recoverySelectionUserModified = true;
+    });
+    _refreshCookForGoal();
+    _refreshSmartSupplements();
+    await _persistRecoverySelection();
+  }
+
+  Future<void> _setDifferentWorkoutDuration(int value) async {
+    setState(() {
+      _differentWorkoutDuration = value;
+      _recoverySelectionInitialized = true;
+      _recoverySelectionUserModified = true;
+    });
+    _refreshCookForGoal();
+    _refreshSmartSupplements();
+    await _persistRecoverySelection();
+  }
+
+  Future<void> _setDifferentWorkoutIntensity(
+    RecoveryWorkoutIntensity value,
+  ) async {
+    setState(() {
+      _differentWorkoutIntensity = value;
+      _recoverySelectionInitialized = true;
+      _recoverySelectionUserModified = true;
+    });
+    _refreshCookForGoal();
+    _refreshSmartSupplements();
+    await _persistRecoverySelection();
+  }
+
+  Future<void> _persistRecoverySelection() {
+    return _recoveryNutritionService.saveDailySelection(
+      source: _recoverySource,
+      differentWorkout:
+          _recoverySource == RecoveryWorkoutSource.differentWorkout
+          ? _differentRecoveryWorkout
+          : null,
+    );
+  }
+
+  Future<void> _loadTodayFood() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingTodayFood = true;
+        _todayFoodError = null;
+      });
+    }
+    try {
+      final todayFood = await _foodLogService.loadToday();
+      if (!mounted) return;
+      setState(() {
+        _todayFood = todayFood;
+        _isLoadingTodayFood = false;
+      });
+      _refreshCookForGoal();
+      _refreshSmartSupplements();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _todayFoodError = error.toString();
+        _isLoadingTodayFood = false;
+      });
+      _refreshCookForGoal();
+      _refreshSmartSupplements();
+    }
+  }
+
+  bool get _hasDemandingRecoveryContext {
+    if (_recoverySource == RecoveryWorkoutSource.restDay) return false;
+    final workout = _recoverySource == RecoveryWorkoutSource.differentWorkout
+        ? _differentRecoveryWorkout
+        : _recoveryContext?.trainingPlanWorkout;
+    return workout?.intensity == RecoveryWorkoutIntensity.hard ||
+        workout?.intensity == RecoveryWorkoutIntensity.veryHard;
+  }
+
+  Future<void> _refreshCookForGoal() async {
+    if (_isLoadingPerformanceFuel || _isLoadingTodayFood || _profile == null) {
+      return;
+    }
+    final fuel = _performanceFuel;
+    final todayFood = _todayFood;
+    if (fuel == null || todayFood == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingRecipes = false;
+        _recipeError = fuel == null
+            ? 'Performance Fuel is needed for personalized recipes.'
+            : 'Consumed Today is needed for personalized recipes.';
+      });
+      return;
+    }
+
+    final requestId = ++_recipeRequestId;
+    setState(() {
+      _isLoadingRecipes = true;
+      _recipeError = null;
+    });
+    try {
+      final recipes = await _cookForGoalService.recommend(
+        fuel: fuel,
+        consumedToday: todayFood,
+        profile: _profile!,
+        demandingRecovery: _hasDemandingRecoveryContext,
+      );
+      if (!mounted || requestId != _recipeRequestId) return;
+      setState(() {
+        _cookForGoalRecipes = recipes;
+        _refreshingRecipeIndexes.clear();
+        _isLoadingRecipes = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _recipeRequestId) return;
+      setState(() {
+        _recipeError = 'Could not load suitable recipes: $error';
+        _isLoadingRecipes = false;
+      });
+    }
+  }
+
+  void _refreshSmartSupplements() {
+    if (_isLoadingPerformanceFuel ||
+        _isLoadingTodayFood ||
+        _isLoadingRecovery ||
+        _profile == null) {
+      return;
+    }
+    final fuel = _performanceFuel;
+    final todayFood = _todayFood;
+    final recoveryContext = _recoveryContext;
+    if (fuel == null || todayFood == null || recoveryContext == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSupplements = false;
+        _supplementError =
+            'Personalized supplement guidance is temporarily unavailable.';
+      });
+      return;
+    }
+
+    try {
+      final selectedWorkout = switch (_recoverySource) {
+        RecoveryWorkoutSource.trainingPlan =>
+          recoveryContext.trainingPlanWorkout,
+        RecoveryWorkoutSource.differentWorkout => _differentRecoveryWorkout,
+        RecoveryWorkoutSource.restDay => null,
+      };
+      final recommendations = _smartSupplementService.recommend(
+        profile: _profile!,
+        fuel: fuel,
+        consumedToday: todayFood,
+        recoveryContext: recoveryContext,
+        recoverySource: _recoverySource,
+        selectedWorkout: selectedWorkout,
+      );
+      if (!mounted) return;
+      setState(() {
+        _smartSupplements = recommendations;
+        _isLoadingSupplements = false;
+        _supplementError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSupplements = false;
+        _supplementError = 'Could not update supplement guidance: $error';
+      });
+    }
+  }
+
+  Future<void> _tryAnotherRecipe(int index) async {
+    if (_refreshingRecipeIndexes.contains(index) ||
+        index < 0 ||
+        index >= _cookForGoalRecipes.length) {
+      return;
+    }
+    final fuel = _performanceFuel;
+    final todayFood = _todayFood;
+    final profile = _profile;
+    if (fuel == null || todayFood == null || profile == null) return;
+
+    final contextRequestId = _recipeRequestId;
+    final currentRecipeId = _cookForGoalRecipes[index].recipe.id;
+    setState(() => _refreshingRecipeIndexes.add(index));
+    try {
+      final candidates = await _cookForGoalService.recommend(
+        fuel: fuel,
+        consumedToday: todayFood,
+        profile: profile,
+        demandingRecovery: _hasDemandingRecoveryContext,
+        limit: 100,
+      );
+      if (!mounted || contextRequestId != _recipeRequestId) return;
+      final displayedIds = _cookForGoalRecipes
+          .map((item) => item.recipe.id)
+          .toSet();
+      RankedCookForGoalRecipe? replacement;
+      for (final candidate in candidates) {
+        if (candidate.recipe.id != currentRecipeId &&
+            !displayedIds.contains(candidate.recipe.id)) {
+          replacement = candidate;
+          break;
+        }
+      }
+      if (replacement == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No other suitable recipe is available right now.'),
+          ),
+        );
+        return;
+      }
+      if (index >= _cookForGoalRecipes.length ||
+          _cookForGoalRecipes[index].recipe.id != currentRecipeId) {
+        return;
+      }
+      setState(() {
+        final updated = List<RankedCookForGoalRecipe>.from(_cookForGoalRecipes);
+        updated[index] = replacement!;
+        _cookForGoalRecipes = List.unmodifiable(updated);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not try another recipe: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _refreshingRecipeIndexes.remove(index));
+      }
+    }
+  }
+
+  Future<void> _scanOrLogFood() async {
+    final logged = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const CalorieScannerScreen(returnAfterConfirmation: true),
+      ),
+    );
+    if (!mounted || logged != true) return;
+    setState(() {
+      _mealBuilderResult = null;
+      _mealAlternativeIndexes.clear();
+    });
+    await _loadTodayFood();
+  }
+
+  Future<void> _buildMeal() async {
+    if (_isBuildingMeal) return;
+    setState(() {
+      _isBuildingMeal = true;
+      _mealBuilderError = null;
+    });
+    try {
+      final result = await _nutritionEngineService.buildMeal();
+      if (!mounted) return;
+      setState(() {
+        _mealBuilderResult = result;
+        _mealAlternativeIndexes.clear();
+        _isBuildingMeal = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _mealBuilderError = error.toString();
+        _isBuildingMeal = false;
+      });
+    }
+  }
+
+  void _swapMealFood(int index) {
+    final current = _mealBuilderResult;
+    final profile = _profile;
+    if (current == null || profile == null) return;
+    final substitution = _mealSubstitutionService.nextAlternative(
+      currentResult: current,
+      foodIndex: index,
+      profile: profile,
+      currentAlternativeIndex: _mealAlternativeIndexes[index],
+    );
+    if (substitution == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other suitable option available.')),
+      );
+      return;
+    }
+    setState(() {
+      _mealBuilderResult = substitution.result;
+      _mealAlternativeIndexes[index] = substitution.alternativeIndex;
+    });
   }
 
   Future<void> _editProfile() async {
@@ -158,7 +546,12 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
       ),
     );
     if (!mounted || updated == null) return;
-    setState(() => _profile = updated);
+    setState(() {
+      _profile = updated;
+      _mealBuilderResult = null;
+      _mealAlternativeIndexes.clear();
+    });
+    await _loadPerformanceFuel();
   }
 
   @override
@@ -216,7 +609,11 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
     if (_profile == null) {
       return NutritionProfileScreen(
         isOnboarding: true,
-        onSaved: (profile) => setState(() => _profile = profile),
+        onSaved: (profile) {
+          setState(() => _profile = profile);
+          _loadPerformanceFuel();
+          _loadTodayFood();
+        },
       );
     }
 
@@ -259,42 +656,79 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
         children: [
-          _StrategyCard(data: _demo),
+          _StrategyCard(
+            fuel: _performanceFuel,
+            isLoading: _isLoadingPerformanceFuel,
+            error: _performanceFuelError,
+            onRetry: _loadPerformanceFuel,
+          ),
           const SizedBox(height: 26),
           const _SectionTitle(
             title: 'Meal Builder',
             subtitle: 'Choose food sources and portions for your targets',
           ),
           const SizedBox(height: 12),
-          _MealBuilderCard(data: _demo.mealBuilder),
+          _MealBuilderCard(
+            data: _demo.mealBuilder,
+            result: _mealBuilderResult,
+            isLoading: _isBuildingMeal,
+            error: _mealBuilderError,
+            onBuild: _buildMeal,
+            onSwapFood: _swapMealFood,
+            onOpenCalorieMagnifier: _scanOrLogFood,
+          ),
           const SizedBox(height: 26),
           const _SectionTitle(
             title: 'Consumed Today',
             subtitle: 'A quick view of today’s intake',
           ),
           const SizedBox(height: 12),
-          _TodayProgressCard(metrics: _demo.metrics),
+          _TodayProgressCard(
+            day: _todayFood,
+            fuel: _performanceFuel,
+            isLoading: _isLoadingTodayFood || _isLoadingPerformanceFuel,
+            error: _todayFoodError,
+            onRetry: _loadTodayFood,
+          ),
           const SizedBox(height: 26),
           const _SectionTitle(
             title: 'Recovery Nutrition Requirements',
             subtitle: 'Based on today’s workout and your goal',
           ),
           const SizedBox(height: 12),
-          _RecoveryCard(data: _demo),
+          _RecoveryCard(
+            recoveryContext: _recoveryContext,
+            source: _recoverySource,
+            differentWorkout: _differentRecoveryWorkout,
+            isLoading: _isLoadingRecovery,
+            error: _recoveryError,
+            onRetry: _loadRecoveryNutrition,
+            onSourceChanged: _setRecoverySource,
+            onWorkoutTypeChanged: _setDifferentWorkoutType,
+            onDurationChanged: _setDifferentWorkoutDuration,
+            onIntensityChanged: _setDifferentWorkoutIntensity,
+          ),
           const SizedBox(height: 26),
           const _SectionTitle(
             title: 'Cook for Your Goal',
             subtitle: 'Personalized meals in 45 minutes or less',
           ),
           const SizedBox(height: 12),
-          _RecipeList(recipes: _demo.recipes),
-          const SizedBox(height: 28),
-          const _SectionTitle(
-            title: 'Smart Supplement',
-            subtitle: 'Contextual guidance, with food first',
+          _RecipeList(
+            recipes: _cookForGoalRecipes,
+            refreshingIndexes: _refreshingRecipeIndexes,
+            isLoading: _isLoadingRecipes,
+            error: _recipeError,
+            onRetry: _refreshCookForGoal,
+            onTryAnother: _tryAnotherRecipe,
           ),
-          const SizedBox(height: 12),
-          _SupplementList(items: _demo.supplements),
+          const SizedBox(height: 28),
+          SmartSupplementSection(
+            items: _smartSupplements,
+            isLoading: _isLoadingSupplements,
+            error: _supplementError,
+            onRetry: _refreshSmartSupplements,
+          ),
           const SizedBox(height: 28),
           const _SectionTitle(
             title: 'Member Offers',
@@ -309,31 +743,10 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
 }
 
 class _NutritionDemoData {
-  final String goal;
-  final List<_NutritionMetric> metrics;
-  final String workout;
-  final int caloriesBurned;
-  final String recoveryProtein;
-  final String recoveryCarbs;
-  final String recoveryHydration;
   final _MealBuilderDemo mealBuilder;
-  final List<_RecipeDemo> recipes;
-  final List<_SupplementDemo> supplements;
   final List<_MemberOfferDemo> offers;
 
-  const _NutritionDemoData({
-    required this.goal,
-    required this.metrics,
-    required this.workout,
-    required this.caloriesBurned,
-    required this.recoveryProtein,
-    required this.recoveryCarbs,
-    required this.recoveryHydration,
-    required this.mealBuilder,
-    required this.recipes,
-    required this.supplements,
-    required this.offers,
-  });
+  const _NutritionDemoData({required this.mealBuilder, required this.offers});
 }
 
 class _NutritionMetric {
@@ -365,40 +778,6 @@ class _MealBuilderDemo {
   });
 }
 
-class _RecipeDemo {
-  final String name;
-  final int calories;
-  final int protein;
-  final int cookingMinutes;
-  final String assetPath;
-
-  const _RecipeDemo(
-    this.name,
-    this.calories,
-    this.protein,
-    this.cookingMinutes,
-    this.assetPath,
-  );
-}
-
-class _SupplementDemo {
-  final String name;
-  final String supports;
-  final String relevance;
-  final String foodFirst;
-  final String assetPath;
-  final IconData icon;
-
-  const _SupplementDemo({
-    required this.name,
-    required this.supports,
-    required this.relevance,
-    required this.foodFirst,
-    required this.assetPath,
-    required this.icon,
-  });
-}
-
 class _MemberOfferDemo {
   final String title;
   final String detail;
@@ -408,9 +787,17 @@ class _MemberOfferDemo {
 }
 
 class _StrategyCard extends StatelessWidget {
-  final _NutritionDemoData data;
+  final PerformanceFuel? fuel;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onRetry;
 
-  const _StrategyCard({required this.data});
+  const _StrategyCard({
+    required this.fuel,
+    required this.isLoading,
+    required this.error,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -442,63 +829,145 @@ class _StrategyCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Text(
-                  data.goal,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+              if (fuel != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Text(
+                    fuel!.goalLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 14,
-            runSpacing: 7,
-            children: [
-              for (final metric in data.metrics)
-                _StrategyInlineMetric(metric: metric),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: null,
-              style: TextButton.styleFrom(
-                disabledForegroundColor: Colors.white70,
-                minimumSize: const Size(0, 32),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Row(
                 children: [
-                  Text(
-                    'View Full Plan',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   ),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward, size: 15),
+                  SizedBox(width: 10),
+                  Text(
+                    'Calculating your personalized targets…',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
+            )
+          else if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Performance Fuel is unavailable right now.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onRetry,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Try Again'),
+                  ),
+                ],
+              ),
+            )
+          else if (fuel != null) ...[
+            Wrap(
+              spacing: 14,
+              runSpacing: 7,
+              children: [
+                for (final metric in _metricsFor(fuel!))
+                  _StrategyInlineMetric(metric: metric),
+              ],
             ),
-          ),
+            const SizedBox(height: 11),
+            const Text(
+              'Why this plan?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              fuel!.why,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+            if (fuel!.micronutrientFocus.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text(
+                'General focus: ${fuel!.micronutrientFocus.join(', ')}',
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
+              ),
+            ],
+            const SizedBox(height: 5),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: null,
+                style: TextButton.styleFrom(
+                  disabledForegroundColor: Colors.white70,
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View Full Plan',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward, size: 15),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  List<_NutritionMetric> _metricsFor(PerformanceFuel value) {
+    return [
+      _NutritionMetric('Calories', 0, value.calories.target, 'kcal'),
+      _NutritionMetric('Protein', 0, value.proteinG, 'g'),
+      _NutritionMetric('Carbs', 0, value.carbsG, 'g'),
+      _NutritionMetric('Fat', 0, value.fatG, 'g'),
+      _NutritionMetric('Fiber', 0, value.fiberG, 'g'),
+      _NutritionMetric('Hydration', 0, value.hydrationL, 'L'),
+    ];
   }
 }
 
@@ -530,117 +999,303 @@ class _StrategyInlineMetric extends StatelessWidget {
 }
 
 class _TodayProgressCard extends StatelessWidget {
-  final List<_NutritionMetric> metrics;
+  final NutritionFoodDay? day;
+  final PerformanceFuel? fuel;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onRetry;
 
-  const _TodayProgressCard({required this.metrics});
+  const _TodayProgressCard({
+    required this.day,
+    required this.fuel,
+    required this.isLoading,
+    required this.error,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final calories = _metric('Calories');
-
     return _SurfaceCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'CALORIES',
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 0.7,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_number(calories.consumed)} / ${_number(calories.target)} kcal',
-                      style: const TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: CircularProgressIndicator(),
               ),
-              Text(
-                '${_number(calories.remaining)} kcal left',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.primaryGreen,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.visionCard,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(
-                color: AppTheme.primaryGreen.withValues(alpha: 0.12),
-              ),
-            ),
-            child: Column(
+            )
+          else if (error != null)
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Next Focus',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                  ),
+                  'Today\'s food log is unavailable right now.',
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 5),
-                const Text(
-                  'Prioritize protein in your next meal.\n68 g protein left today.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    fontWeight: FontWeight.w600,
+                Text(
+                  error!,
+                  style: const TextStyle(
+                    fontSize: 11,
                     color: AppTheme.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 3),
-                TextButton(
-                  onPressed: () {},
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 30),
-                    padding: EdgeInsets.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('Get Meal Ideas'),
-                ),
+                TextButton(onPressed: onRetry, child: const Text('Try Again')),
               ],
+            )
+          else if (day != null && fuel != null) ...[
+            _TodayNutritionContent(day: day!, fuel: fuel!),
+          ] else
+            const Text(
+              'Nutrition targets are unavailable right now.',
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
-          ),
         ],
       ),
     );
   }
-
-  _NutritionMetric _metric(String label) =>
-      metrics.firstWhere((item) => item.label == label);
 }
 
-class _RecoveryCard extends StatelessWidget {
-  final _NutritionDemoData data;
+class _TodayNutritionContent extends StatelessWidget {
+  final NutritionFoodDay day;
+  final PerformanceFuel fuel;
 
-  const _RecoveryCard({required this.data});
+  const _TodayNutritionContent({required this.day, required this.fuel});
 
   @override
   Widget build(BuildContext context) {
+    final totals = day.totals;
+    final remaining = day.remainingFor(fuel);
+    final focus = _nextFocus(totals, remaining);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CALORIES',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 0.7,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_number(totals.calories)} / ${fuel.calories.target} kcal',
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '${_number(remaining.calories)} kcal left',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 18,
+          runSpacing: 7,
+          children: [
+            _TodayMacroText(
+              label: 'Protein',
+              consumed: totals.proteinG,
+              target: fuel.proteinG,
+            ),
+            _TodayMacroText(
+              label: 'Carbs',
+              consumed: totals.carbsG,
+              target: fuel.carbsG,
+            ),
+            _TodayMacroText(
+              label: 'Fat',
+              consumed: totals.fatG,
+              target: fuel.fatG,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.visionCard,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: AppTheme.primaryGreen.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Next Focus',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${focus.$1}\n${focus.$2}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              TextButton(
+                onPressed: () {},
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 30),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Get Meal Ideas'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  (String, String) _nextFocus(
+    NutritionFoodTotals totals,
+    NutritionFoodRemaining remaining,
+  ) {
+    final gaps = <(String, double)>[
+      ('protein', remaining.proteinG / fuel.proteinG),
+      ('carbs', remaining.carbsG / fuel.carbsG),
+      ('fat', remaining.fatG / fuel.fatG),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+    switch (gaps.first.$1) {
+      case 'carbs':
+        return (
+          'Prioritize quality carbohydrates in your next meal.',
+          '${_number(remaining.carbsG)} g carbs left today.',
+        );
+      case 'fat':
+        return (
+          'Include healthy fats in your next meal.',
+          '${_number(remaining.fatG)} g fat left today.',
+        );
+      default:
+        return (
+          'Prioritize protein in your next meal.',
+          '${_number(remaining.proteinG)} g protein left today.',
+        );
+    }
+  }
+}
+
+class _TodayMacroText extends StatelessWidget {
+  final String label;
+  final double consumed;
+  final int target;
+
+  const _TodayMacroText({
+    required this.label,
+    required this.consumed,
+    required this.target,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$label  ${_number(consumed)} / $target g',
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: AppTheme.textSecondary,
+      ),
+    );
+  }
+}
+
+class _RecoveryCard extends StatelessWidget {
+  final RecoveryNutritionContext? recoveryContext;
+  final RecoveryWorkoutSource source;
+  final RecoveryWorkout differentWorkout;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onRetry;
+  final ValueChanged<RecoveryWorkoutSource> onSourceChanged;
+  final ValueChanged<String> onWorkoutTypeChanged;
+  final ValueChanged<int> onDurationChanged;
+  final ValueChanged<RecoveryWorkoutIntensity> onIntensityChanged;
+
+  const _RecoveryCard({
+    required this.recoveryContext,
+    required this.source,
+    required this.differentWorkout,
+    required this.isLoading,
+    required this.error,
+    required this.onRetry,
+    required this.onSourceChanged,
+    required this.onWorkoutTypeChanged,
+    required this.onDurationChanged,
+    required this.onIntensityChanged,
+  });
+
+  static const _engine = RecoveryNutritionEngine();
+  static const _workoutTypes = [
+    'Strength Training',
+    'Cardio',
+    'HIIT',
+    'Sports',
+    'Mobility',
+  ];
+  static const _durations = [30, 45, 60, 75, 90];
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const _SurfaceCard(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (error != null || recoveryContext == null) {
+      return _SurfaceCard(
+        child: Column(
+          children: [
+            Text(
+              error ?? 'Recovery nutrition is unavailable.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    final recommendation = _engine.calculate(
+      context: recoveryContext!,
+      source: source,
+      differentWorkout: differentWorkout,
+    );
     return _SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,8 +1303,10 @@ class _RecoveryCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 620;
-              final workoutSummary = _RecoveryWorkoutSummary(data: data);
-              final targets = _RecoveryTargets(data: data);
+              final workoutSummary = _RecoveryWorkoutSummary(
+                recommendation: recommendation,
+              );
+              final targets = _RecoveryTargets(recommendation: recommendation);
 
               if (isWide) {
                 return Row(
@@ -679,26 +1336,92 @@ class _RecoveryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          const Wrap(
+          Wrap(
             spacing: 7,
             runSpacing: 7,
             children: [
               _WorkoutSourceChip(
                 label: 'Followed my Training Plan',
-                selected: true,
+                selected: source == RecoveryWorkoutSource.trainingPlan,
+                onTap: () =>
+                    onSourceChanged(RecoveryWorkoutSource.trainingPlan),
               ),
-              _WorkoutSourceChip(label: 'Different Workout'),
-              _WorkoutSourceChip(label: 'Rest Day'),
+              _WorkoutSourceChip(
+                label: 'Different Workout',
+                selected: source == RecoveryWorkoutSource.differentWorkout,
+                onTap: () =>
+                    onSourceChanged(RecoveryWorkoutSource.differentWorkout),
+              ),
+              _WorkoutSourceChip(
+                label: 'Rest Day',
+                selected: source == RecoveryWorkoutSource.restDay,
+                onTap: () => onSourceChanged(RecoveryWorkoutSource.restDay),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: null,
-              child: const Text('View Recovery'),
+          if (source == RecoveryWorkoutSource.differentWorkout) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('workout-${differentWorkout.type}'),
+                    initialValue: differentWorkout.type,
+                    decoration: const InputDecoration(labelText: 'Workout'),
+                    items: _workoutTypes
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) onWorkoutTypeChanged(value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey(
+                      'duration-${differentWorkout.durationMinutes}',
+                    ),
+                    initialValue: differentWorkout.durationMinutes,
+                    decoration: const InputDecoration(labelText: 'Duration'),
+                    items: _durations
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value min'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) onDurationChanged(value);
+                    },
+                  ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<RecoveryWorkoutIntensity>(
+              key: ValueKey('intensity-${differentWorkout.intensity.name}'),
+              initialValue: differentWorkout.intensity,
+              decoration: const InputDecoration(labelText: 'Intensity'),
+              items: RecoveryWorkoutIntensity.values
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(_intensityLabel(value)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) onIntensityChanged(value);
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -706,16 +1429,22 @@ class _RecoveryCard extends StatelessWidget {
 }
 
 class _RecoveryWorkoutSummary extends StatelessWidget {
-  final _NutritionDemoData data;
+  final RecoveryNutritionRecommendation recommendation;
 
-  const _RecoveryWorkoutSummary({required this.data});
+  const _RecoveryWorkoutSummary({required this.recommendation});
 
   @override
   Widget build(BuildContext context) {
+    final workout = recommendation.workout;
+    final title = recommendation.isRestDay
+        ? 'Rest Day'
+        : workout?.name ?? 'Workout details unavailable';
     return Row(
       children: [
-        const _IconBox(
-          icon: Icons.fitness_center_outlined,
+        _IconBox(
+          icon: recommendation.isRestDay
+              ? Icons.self_improvement_outlined
+              : Icons.fitness_center_outlined,
           color: AppTheme.journeyCard,
         ),
         const SizedBox(width: 12),
@@ -734,22 +1463,43 @@ class _RecoveryWorkoutSummary extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                data.workout,
+                title,
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                   color: AppTheme.textPrimary,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Estimated burn  ~${data.caloriesBurned} kcal',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryGreen,
+              if (workout != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '${workout.durationMinutes} min · '
+                  '${_intensityLabel(workout.intensity)}'
+                  '${workout.exerciseCount == null ? '' : ' · ${workout.exerciseCount} exercises'}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
-              ),
+              ],
+              if (recommendation.estimatedCaloriesBurned != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Estimated burn ~${recommendation.estimatedCaloriesBurned} kcal',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryGreen,
+                  ),
+                ),
+              ],
+              if (workout != null && !workout.isScheduledWorkout) ...[
+                const SizedBox(height: 3),
+                const Text(
+                  'Exact plan session is not scheduled for today.',
+                  style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                ),
+              ],
             ],
           ),
         ),
@@ -759,12 +1509,42 @@ class _RecoveryWorkoutSummary extends StatelessWidget {
 }
 
 class _RecoveryTargets extends StatelessWidget {
-  final _NutritionDemoData data;
+  final RecoveryNutritionRecommendation recommendation;
 
-  const _RecoveryTargets({required this.data});
+  const _RecoveryTargets({required this.recommendation});
 
   @override
   Widget build(BuildContext context) {
+    if (recommendation.isRestDay) {
+      final hydration = recommendation.dailyHydrationL;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'REST-DAY RECOVERY',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 0.7,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            hydration == null
+                ? 'Follow your daily Performance Fuel plan and hydrate normally.'
+                : 'Follow your daily Performance Fuel plan, including ${_number(hydration)} L hydration.',
+            style: const TextStyle(height: 1.4, color: AppTheme.textSecondary),
+          ),
+        ],
+      );
+    }
+    if (recommendation.workout == null) {
+      return const Text(
+        'Add workout details to calculate recovery targets.',
+        style: TextStyle(color: AppTheme.textSecondary),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -783,19 +1563,27 @@ class _RecoveryTargets extends StatelessWidget {
             Expanded(
               child: _RecoveryMetric(
                 label: 'Protein',
-                value: data.recoveryProtein,
+                value: '${recommendation.proteinG} g',
               ),
             ),
             Expanded(
-              child: _RecoveryMetric(label: 'Carbs', value: data.recoveryCarbs),
+              child: _RecoveryMetric(
+                label: 'Carbs',
+                value: '${recommendation.carbsG} g',
+              ),
             ),
             Expanded(
               child: _RecoveryMetric(
                 label: 'Hydration',
-                value: data.recoveryHydration,
+                value: '${recommendation.hydrationMl} ml',
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 7),
+        const Text(
+          'Workout-specific guidance; estimated burn is not an eat-back target.',
+          style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
         ),
       ],
     );
@@ -805,41 +1593,62 @@ class _RecoveryTargets extends StatelessWidget {
 class _WorkoutSourceChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final VoidCallback onTap;
 
-  const _WorkoutSourceChip({required this.label, this.selected = false});
+  const _WorkoutSourceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: selected ? AppTheme.visionCard : AppTheme.background,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: selected ? AppTheme.primaryGreen : AppTheme.border,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            selected ? Icons.check_circle : Icons.circle_outlined,
-            size: 14,
-            color: selected ? AppTheme.primaryGreen : AppTheme.textSecondary,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.visionCard : AppTheme.background,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? AppTheme.primaryGreen : AppTheme.border,
           ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              size: 14,
               color: selected ? AppTheme.primaryGreen : AppTheme.textSecondary,
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? AppTheme.primaryGreen
+                    : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+String _intensityLabel(RecoveryWorkoutIntensity intensity) {
+  return switch (intensity) {
+    RecoveryWorkoutIntensity.veryLight => 'Very Light',
+    RecoveryWorkoutIntensity.light => 'Light',
+    RecoveryWorkoutIntensity.moderate => 'Moderate',
+    RecoveryWorkoutIntensity.hard => 'Hard',
+    RecoveryWorkoutIntensity.veryHard => 'Very Hard',
+  };
 }
 
 class _RecoveryMetric extends StatelessWidget {
@@ -881,8 +1690,22 @@ class _RecoveryMetric extends StatelessWidget {
 
 class _MealBuilderCard extends StatelessWidget {
   final _MealBuilderDemo data;
+  final MealBuilderResult? result;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onBuild;
+  final ValueChanged<int> onSwapFood;
+  final VoidCallback onOpenCalorieMagnifier;
 
-  const _MealBuilderCard({required this.data});
+  const _MealBuilderCard({
+    required this.data,
+    required this.result,
+    required this.isLoading,
+    required this.error,
+    required this.onBuild,
+    required this.onSwapFood,
+    required this.onOpenCalorieMagnifier,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -891,21 +1714,58 @@ class _MealBuilderCard extends StatelessWidget {
         final isWide = constraints.maxWidth >= 720;
 
         if (isWide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 3, child: _PrimaryMealCard(data: data)),
-              const SizedBox(width: 12),
-              Expanded(flex: 2, child: _AlternativeMealCard(data: data)),
-            ],
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _PrimaryMealCard(
+                    data: data,
+                    result: result,
+                    isLoading: isLoading,
+                    error: error,
+                    onBuild: onBuild,
+                    onSwapFood: onSwapFood,
+                    alignActionToBottom: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _AlternativeMealCard(data: data),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: _CalorieMagnifierCard(
+                          onTap: onOpenCalorieMagnifier,
+                          alignActionToBottom: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
         return Column(
           children: [
-            _PrimaryMealCard(data: data),
+            _PrimaryMealCard(
+              data: data,
+              result: result,
+              isLoading: isLoading,
+              error: error,
+              onBuild: onBuild,
+              onSwapFood: onSwapFood,
+            ),
             const SizedBox(height: 10),
             _AlternativeMealCard(data: data),
+            const SizedBox(height: 10),
+            _CalorieMagnifierCard(onTap: onOpenCalorieMagnifier),
           ],
         );
       },
@@ -915,11 +1775,26 @@ class _MealBuilderCard extends StatelessWidget {
 
 class _PrimaryMealCard extends StatelessWidget {
   final _MealBuilderDemo data;
+  final MealBuilderResult? result;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onBuild;
+  final ValueChanged<int> onSwapFood;
+  final bool alignActionToBottom;
 
-  const _PrimaryMealCard({required this.data});
+  const _PrimaryMealCard({
+    required this.data,
+    required this.result,
+    required this.isLoading,
+    required this.error,
+    required this.onBuild,
+    required this.onSwapFood,
+    this.alignActionToBottom = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final macros = result?.totals;
     return _SurfaceCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -971,33 +1846,279 @@ class _PrimaryMealCard extends StatelessWidget {
             spacing: 7,
             runSpacing: 7,
             children: [
-              _MealChip('~${data.calories} kcal'),
-              _MealChip('~${data.protein} g Protein'),
-              _MealChip('~${data.carbs} g Carbs'),
+              _MealChip('~${macros?.calories ?? data.calories} kcal'),
+              _MealChip('${macros?.proteinG ?? data.protein} g Protein'),
+              _MealChip('${macros?.carbsG ?? data.carbs} g Carbs'),
+              if (macros != null) _MealChip('${macros.fatG} g Fat'),
             ],
           ),
           const SizedBox(height: 13),
-          _FoodSourceGroup(
-            title: 'Protein Sources',
-            sources: data.proteinSources,
-          ),
-          const SizedBox(height: 10),
-          _FoodSourceGroup(
-            title: 'Carbohydrate Sources',
-            sources: data.carbohydrateSources,
-          ),
-          const SizedBox(height: 13),
+          if (result == null) ...[
+            _FoodSourceGroup(
+              title: 'Protein Sources',
+              sources: data.proteinSources,
+            ),
+            const SizedBox(height: 10),
+            _FoodSourceGroup(
+              title: 'Carbohydrate Sources',
+              sources: data.carbohydrateSources,
+            ),
+          ] else ...[
+            _GeneratedMealFoods(foods: result!.foods, onSwapFood: onSwapFood),
+            if (result!.reason.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              Text(
+                result!.reason,
+                style: const TextStyle(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 9),
+            Text(
+              error!,
+              style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+            ),
+          ],
+          if (alignActionToBottom)
+            const Spacer()
+          else
+            const SizedBox(height: 13),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: () {},
-              child: const Text('Build My Meal'),
+              onPressed: isLoading ? null : onBuild,
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(error == null ? 'Build My Meal' : 'Try Again'),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+class _GeneratedMealFoods extends StatefulWidget {
+  final List<MealBuilderFood> foods;
+  final ValueChanged<int> onSwapFood;
+
+  const _GeneratedMealFoods({required this.foods, required this.onSwapFood});
+
+  @override
+  State<_GeneratedMealFoods> createState() => _GeneratedMealFoodsState();
+}
+
+class _GeneratedMealFoodsState extends State<_GeneratedMealFoods> {
+  bool _useImperialUnits = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'FOOD SOURCES + PORTIONS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            _MealPortionUnitToggle(
+              useImperialUnits: _useImperialUnits,
+              onChanged: (value) {
+                setState(() => _useImperialUnits = value);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Recommended portions (${_useImperialUnits ? 'oz' : 'g'}) based on what you still need today.',
+          style: const TextStyle(
+            fontSize: 11,
+            height: 1.35,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 7),
+        for (var index = 0; index < widget.foods.length; index++) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _MealBuilderFoodChip(
+                      key: ValueKey(widget.foods[index].foodKey),
+                      foodName: widget.foods[index].displayName,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _mealFoodNutritionLine(
+                        widget.foods[index],
+                        useImperialUnits: _useImperialUnits,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next ${widget.foods[index].displayName} alternative',
+                onPressed: () => widget.onSwapFood(index),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                padding: const EdgeInsets.all(8),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: 21,
+                  color: AppTheme.primaryGreen,
+                ),
+              ),
+            ],
+          ),
+          if (index != widget.foods.length - 1) const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+}
+
+class _MealPortionUnitToggle extends StatelessWidget {
+  final bool useImperialUnits;
+  final ValueChanged<bool> onChanged;
+
+  const _MealPortionUnitToggle({
+    required this.useImperialUnits,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 26,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _MealPortionUnitOption(
+            label: 'g',
+            selected: !useImperialUnits,
+            onTap: () => onChanged(false),
+          ),
+          _MealPortionUnitOption(
+            label: 'oz',
+            selected: useImperialUnits,
+            onTap: () => onChanged(true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MealPortionUnitOption extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MealPortionUnitOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Show Meal Builder portions in $label',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.primaryGreen : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: selected ? Colors.white : AppTheme.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const double _gramsPerOunce = 28.3495;
+
+String _displayMealPortion(int amountG, {required bool useImperialUnits}) {
+  if (useImperialUnits) {
+    return '${(amountG / _gramsPerOunce).toStringAsFixed(1)} oz';
+  }
+  return '${amountG.round()} g';
+}
+
+String _mealFoodNutritionLine(
+  MealBuilderFood food, {
+  required bool useImperialUnits,
+}) {
+  final portion = _displayMealPortion(
+    food.amountG,
+    useImperialUnits: useImperialUnits,
+  );
+  final macro = switch (food.role.trim().toLowerCase()) {
+    'protein' => '${food.nutrition.proteinG} g protein',
+    'carb' || 'carbohydrate' => '${food.nutrition.carbsG} g carbs',
+    'fat' => '${food.nutrition.fatG} g fat',
+    _ => _largestMealFoodMacro(food.nutrition),
+  };
+  return '$portion / ${food.nutrition.calories} kcal / $macro';
+}
+
+String _largestMealFoodMacro(MealBuilderMacros nutrition) {
+  if (nutrition.proteinG >= nutrition.carbsG &&
+      nutrition.proteinG >= nutrition.fatG) {
+    return '${nutrition.proteinG} g protein';
+  }
+  if (nutrition.carbsG >= nutrition.fatG) {
+    return '${nutrition.carbsG} g carbs';
+  }
+  return '${nutrition.fatG} g fat';
 }
 
 class _AlternativeMealCard extends StatelessWidget {
@@ -1036,6 +2157,94 @@ class _AlternativeMealCard extends StatelessWidget {
   }
 }
 
+class _CalorieMagnifierCard extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool alignActionToBottom;
+
+  const _CalorieMagnifierCard({
+    required this.onTap,
+    this.alignActionToBottom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _CalorieMagnifierIcon(),
+        SizedBox(height: 18),
+        Text(
+          'Calorie Magnifier',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        SizedBox(height: 7),
+        Text(
+          'Take Photo or Upload Photo',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        SizedBox(height: 20),
+      ],
+    );
+
+    return Semantics(
+      button: true,
+      label: 'Open Calorie Magnifier',
+      child: GestureDetector(
+        onTap: onTap,
+        child: _SurfaceCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              if (alignActionToBottom)
+                const Expanded(child: content)
+              else
+                content,
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onTap,
+                  icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                  label: const Text('Open Calorie Magnifier'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalorieMagnifierIcon extends StatelessWidget {
+  const _CalorieMagnifierIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        color: AppTheme.visionCard,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: AppTheme.primaryGreen.withValues(alpha: 0.16),
+        ),
+      ),
+      child: const Icon(
+        Icons.camera_alt_outlined,
+        size: 34,
+        color: AppTheme.primaryGreen,
+      ),
+    );
+  }
+}
+
 class _FoodSourceGroup extends StatelessWidget {
   final String title;
   final List<String> sources;
@@ -1061,7 +2270,7 @@ class _FoodSourceGroup extends StatelessWidget {
           runSpacing: 6,
           children: [
             for (final source in sources)
-              _FoodSourceChip(label: source, assetPath: _foodAssetPath(source)),
+              _MealBuilderFoodChip(key: ValueKey(source), foodName: source),
           ],
         ),
       ],
@@ -1069,11 +2278,48 @@ class _FoodSourceGroup extends StatelessWidget {
   }
 }
 
-class _FoodSourceChip extends StatelessWidget {
-  final String label;
-  final String assetPath;
+class _MealBuilderFoodChip extends StatefulWidget {
+  final String foodName;
 
-  const _FoodSourceChip({required this.label, required this.assetPath});
+  const _MealBuilderFoodChip({super.key, required this.foodName});
+
+  @override
+  State<_MealBuilderFoodChip> createState() => _MealBuilderFoodChipState();
+}
+
+class _MealBuilderFoodChipState extends State<_MealBuilderFoodChip> {
+  static final FoodVisualService _visualService = FoodVisualService();
+
+  FoodVisual? _visual;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MealBuilderFoodChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.foodName != widget.foodName) {
+      _visual = null;
+      _resolveImage();
+    }
+  }
+
+  Future<void> _resolveImage() async {
+    final requestedFood = widget.foodName;
+    final visual = await _visualService.resolveFoodImage(requestedFood);
+    if (!mounted || widget.foodName != requestedFood) return;
+
+    if (!visual.isReady) {
+      debugPrint(
+        'Food visual unavailable for "$requestedFood": '
+        '${visual.errorCode} ${visual.message}',
+      );
+    }
+    setState(() => _visual = visual);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1087,16 +2333,29 @@ class _FoodSourceChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          NutritionAssetImage(
-            assetPath: assetPath,
-            width: 24,
-            height: 24,
-            borderRadius: BorderRadius.circular(999),
-            fallbackIcon: Icons.restaurant_outlined,
-          ),
+          if (_visual == null)
+            const _FoodImageLoadingPlaceholder()
+          else if (_visual!.isReady)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: Image.network(
+                _visual!.imageUrl!,
+                width: 24,
+                height: 24,
+                fit: BoxFit.cover,
+                errorBuilder: (_, error, _) {
+                  debugPrint(
+                    'Food image load failed for "${widget.foodName}": $error',
+                  );
+                  return const _FoodImageFallback();
+                },
+              ),
+            )
+          else
+            const _FoodImageFallback(),
           const SizedBox(width: 6),
           Text(
-            label,
+            widget.foodName,
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -1104,6 +2363,48 @@ class _FoodSourceChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FoodImageLoadingPlaceholder extends StatelessWidget {
+  const _FoodImageLoadingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFFE7ECE9),
+      ),
+      padding: const EdgeInsets.all(7),
+      child: const CircularProgressIndicator(
+        strokeWidth: 1.5,
+        color: AppTheme.primaryGreen,
+      ),
+    );
+  }
+}
+
+class _FoodImageFallback extends StatelessWidget {
+  const _FoodImageFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFFE7ECE9),
+      ),
+      child: const Icon(
+        Icons.restaurant_outlined,
+        size: 13,
+        color: AppTheme.textSecondary,
       ),
     );
   }
@@ -1162,12 +2463,59 @@ class _MealChip extends StatelessWidget {
 }
 
 class _RecipeList extends StatelessWidget {
-  final List<_RecipeDemo> recipes;
+  final List<RankedCookForGoalRecipe> recipes;
+  final Set<int> refreshingIndexes;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onRetry;
+  final ValueChanged<int> onTryAnother;
 
-  const _RecipeList({required this.recipes});
+  const _RecipeList({
+    required this.recipes,
+    required this.refreshingIndexes,
+    required this.isLoading,
+    required this.error,
+    required this.onRetry,
+    required this.onTryAnother,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const _SurfaceCard(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (error != null) {
+      return _SurfaceCard(
+        child: Column(
+          children: [
+            Text(
+              error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    if (recipes.isEmpty) {
+      return _SurfaceCard(
+        child: Column(
+          children: [
+            const Text(
+              'No recipes safely match your current dietary restrictions.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 760;
@@ -1178,7 +2526,12 @@ class _RecipeList extends StatelessWidget {
             children: [
               for (var index = 0; index < recipes.length; index++) ...[
                 Expanded(
-                  child: _RecipeCard(recipe: recipes[index], index: index),
+                  child: _RecipeCard(
+                    recommendation: recipes[index],
+                    index: index,
+                    isRefreshing: refreshingIndexes.contains(index),
+                    onTryAnother: () => onTryAnother(index),
+                  ),
                 ),
                 if (index != recipes.length - 1) const SizedBox(width: 10),
               ],
@@ -1189,7 +2542,12 @@ class _RecipeList extends StatelessWidget {
         return Column(
           children: [
             for (var index = 0; index < recipes.length; index++) ...[
-              _RecipeCard(recipe: recipes[index], index: index),
+              _RecipeCard(
+                recommendation: recipes[index],
+                index: index,
+                isRefreshing: refreshingIndexes.contains(index),
+                onTryAnother: () => onTryAnother(index),
+              ),
               if (index != recipes.length - 1) const SizedBox(height: 10),
             ],
           ],
@@ -1200,13 +2558,21 @@ class _RecipeList extends StatelessWidget {
 }
 
 class _RecipeCard extends StatelessWidget {
-  final _RecipeDemo recipe;
+  final RankedCookForGoalRecipe recommendation;
   final int index;
+  final bool isRefreshing;
+  final VoidCallback onTryAnother;
 
-  const _RecipeCard({required this.recipe, required this.index});
+  const _RecipeCard({
+    required this.recommendation,
+    required this.index,
+    required this.isRefreshing,
+    required this.onTryAnother,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final recipe = recommendation.recipe;
     final icons = [
       Icons.breakfast_dining_outlined,
       Icons.lunch_dining_outlined,
@@ -1220,13 +2586,27 @@ class _RecipeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              NutritionAssetImage(
-                assetPath: recipe.assetPath,
-                width: 72,
-                height: 72,
-                borderRadius: BorderRadius.circular(16),
-                fallbackIcon: icons[index],
-              ),
+              if (recipe.imageAssetPath != null)
+                NutritionAssetImage(
+                  assetPath: recipe.imageAssetPath!,
+                  width: 72,
+                  height: 72,
+                  borderRadius: BorderRadius.circular(16),
+                  fallbackIcon: icons[index % icons.length],
+                )
+              else
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppTheme.visionCard,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    icons[index % icons.length],
+                    color: AppTheme.primaryGreen,
+                  ),
+                ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1271,33 +2651,73 @@ class _RecipeCard extends StatelessWidget {
             spacing: 7,
             runSpacing: 7,
             children: [
-              _RecipeStat('~${recipe.calories} kcal'),
-              _RecipeStat('${recipe.protein} g Protein'),
-              _RecipeStat('${recipe.cookingMinutes} min'),
+              _RecipeStat('~${recipe.nutrition.calories} kcal'),
+              _RecipeStat('${recipe.nutrition.proteinG} g Protein'),
+              _RecipeStat('${recipe.nutrition.carbsG} g Carbs'),
+              _RecipeStat('${recipe.nutrition.fatG} g Fat'),
+              _RecipeStat('${recipe.totalMinutes} min'),
             ],
           ),
-          const SizedBox(height: 7),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () {},
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 34),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'View Recipe',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(width: 3),
-                  Icon(Icons.arrow_forward, size: 15),
-                ],
-              ),
+          const SizedBox(height: 8),
+          Text(
+            recommendation.reason,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppTheme.textSecondary,
             ),
+          ),
+          const SizedBox(height: 7),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => CookForGoalRecipeScreen(recipe: recipe),
+                    ),
+                  );
+                },
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View Recipe',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(width: 3),
+                    Icon(Icons.arrow_forward, size: 15),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Try Another Recipe',
+                onPressed: isRefreshing ? null : onTryAnother,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                padding: const EdgeInsets.all(6),
+                visualDensity: VisualDensity.compact,
+                icon: isRefreshing
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(
+                        Icons.refresh_rounded,
+                        size: 19,
+                        color: AppTheme.primaryGreen,
+                      ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1326,109 +2746,6 @@ class _RecipeStat extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: AppTheme.textSecondary,
         ),
-      ),
-    );
-  }
-}
-
-class _SupplementList extends StatelessWidget {
-  final List<_SupplementDemo> items;
-
-  const _SupplementList({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var index = 0; index < items.length; index++) ...[
-          _SupplementCard(item: items[index]),
-          if (index != items.length - 1) const SizedBox(height: 9),
-        ],
-      ],
-    );
-  }
-}
-
-class _SupplementCard extends StatelessWidget {
-  final _SupplementDemo item;
-
-  const _SupplementCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          NutritionAssetImage(
-            assetPath: item.assetPath,
-            width: 48,
-            height: 48,
-            borderRadius: BorderRadius.circular(12),
-            fallbackIcon: item.icon,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _GuidanceLine(label: 'WHAT', text: item.name, strong: true),
-                const SizedBox(height: 5),
-                _GuidanceLine(label: 'WHY', text: item.supports),
-                const SizedBox(height: 5),
-                _GuidanceLine(label: 'WHY FOR YOU', text: item.relevance),
-                const SizedBox(height: 5),
-                _GuidanceLine(label: 'FOOD FIRST', text: item.foodFirst),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GuidanceLine extends StatelessWidget {
-  final String label;
-  final String text;
-  final bool strong;
-
-  const _GuidanceLine({
-    required this.label,
-    required this.text,
-    this.strong = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        text: '$label  ',
-        style: const TextStyle(
-          fontSize: 9,
-          letterSpacing: 0.5,
-          fontWeight: FontWeight.w900,
-          color: AppTheme.primaryGreen,
-        ),
-        children: [
-          TextSpan(
-            text: text,
-            style: TextStyle(
-              fontSize: strong ? 13 : 11,
-              letterSpacing: 0,
-              height: 1.35,
-              fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
-              color: strong ? AppTheme.textPrimary : AppTheme.textSecondary,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1581,15 +2898,6 @@ String _number(num value) {
     return value.toInt().toString();
   }
   return value.toStringAsFixed(1);
-}
-
-String _foodAssetPath(String food) {
-  final fileName = food
-      .trim()
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-      .replaceAll(RegExp(r'^_|_$'), '');
-  return 'assets/nutrition/foods/$fileName.png';
 }
 
 IconData _metricIcon(String label) {

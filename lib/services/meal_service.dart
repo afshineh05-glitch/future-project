@@ -16,14 +16,12 @@ class MealService {
         throw Exception('User is not logged in');
       }
 
-      final String fileExtension =
-          imageFile.path.split('.').last.toLowerCase();
+      final String fileExtension = imageFile.path.split('.').last.toLowerCase();
 
       final String fileName =
           '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
 
-      final String storagePath =
-          'uploads/${user.id}/$fileName';
+      final String storagePath = 'uploads/${user.id}/$fileName';
 
       debugPrint('Starting image upload...');
       debugPrint('Bucket: meal-images');
@@ -34,10 +32,7 @@ class MealService {
           .upload(
             storagePath,
             imageFile,
-            fileOptions: const FileOptions(
-              cacheControl: '3600',
-              upsert: false,
-            ),
+            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
           );
 
       final String publicUrl = _supabase.storage
@@ -55,7 +50,7 @@ class MealService {
     }
   }
 
-  Future<void> saveMeal({
+  Future<String> saveMeal({
     required MealAnalysisResult result,
     required String imagePath,
   }) async {
@@ -66,19 +61,24 @@ class MealService {
         throw Exception('User is not logged in');
       }
 
-      await _supabase.from('meal_scans').insert({
-        'user_id': user.id,
-        'meal_name': result.mealName,
-        'calories': result.calories,
-        'protein': result.protein,
-        'carbs': result.carbs,
-        'fat': result.fat,
-        'detected_foods': result.detectedFoods,
-        'confidence': result.confidence,
-        'image_path': imagePath,
-      });
+      final saved = await _supabase
+          .from('meal_scans')
+          .insert({
+            'user_id': user.id,
+            'meal_name': result.mealName,
+            'calories': result.calories,
+            'protein': result.protein,
+            'carbs': result.carbs,
+            'fat': result.fat,
+            'detected_foods': result.detectedFoods,
+            'confidence': result.confidence,
+            'image_path': imagePath,
+          })
+          .select('id')
+          .single();
 
       debugPrint('MEAL SAVED SUCCESSFULLY');
+      return saved['id'].toString();
     } catch (error, stackTrace) {
       debugPrint('SAVE MEAL ERROR: $error');
       debugPrint('STACK TRACE: $stackTrace');
@@ -86,9 +86,7 @@ class MealService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getRecentMeals({
-    int limit = 10,
-  }) async {
+  Future<List<Map<String, dynamic>>> getRecentMeals({int limit = 10}) async {
     try {
       final user = _supabase.auth.currentUser;
 
@@ -96,16 +94,12 @@ class MealService {
         throw Exception('User is not logged in');
       }
 
-      final List<Map<String, dynamic>> data =
-          await _supabase
-              .from('meal_scans')
-              .select()
-              .eq('user_id', user.id)
-              .order(
-                'created_at',
-                ascending: false,
-              )
-              .limit(limit);
+      final List<Map<String, dynamic>> data = await _supabase
+          .from('meal_scans')
+          .select()
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(limit);
 
       return data;
     } catch (error, stackTrace) {
@@ -115,9 +109,7 @@ class MealService {
     }
   }
 
-  Future<Map<String, dynamic>?> getMeal(
-    String id,
-  ) async {
+  Future<Map<String, dynamic>?> getMeal(String id) async {
     try {
       final user = _supabase.auth.currentUser;
 
@@ -125,13 +117,12 @@ class MealService {
         throw Exception('User is not logged in');
       }
 
-      final Map<String, dynamic>? data =
-          await _supabase
-              .from('meal_scans')
-              .select()
-              .eq('id', id)
-              .eq('user_id', user.id)
-              .maybeSingle();
+      final Map<String, dynamic>? data = await _supabase
+          .from('meal_scans')
+          .select()
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .maybeSingle();
 
       return data;
     } catch (error, stackTrace) {
@@ -171,10 +162,7 @@ class MealService {
         throw Exception('User is not logged in');
       }
 
-      await _supabase
-          .from('meal_scans')
-          .delete()
-          .eq('user_id', user.id);
+      await _supabase.from('meal_scans').delete().eq('user_id', user.id);
 
       debugPrint('ALL USER MEALS DELETED SUCCESSFULLY');
     } catch (error, stackTrace) {

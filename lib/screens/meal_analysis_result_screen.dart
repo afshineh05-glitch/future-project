@@ -3,28 +3,58 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:future_project/models/meal_analysis_result.dart';
+import 'package:future_project/services/nutrition_food_log_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 
-class MealAnalysisResultScreen extends StatelessWidget {
+class MealAnalysisResultScreen extends StatefulWidget {
   final File imageFile;
   final MealAnalysisResult result;
+  final String analysisReference;
 
   const MealAnalysisResultScreen({
     super.key,
     required this.imageFile,
     required this.result,
+    required this.analysisReference,
   });
 
   @override
+  State<MealAnalysisResultScreen> createState() =>
+      _MealAnalysisResultScreenState();
+}
+
+class _MealAnalysisResultScreenState extends State<MealAnalysisResultScreen> {
+  final NutritionFoodLogService _foodLogService = NutritionFoodLogService();
+  bool _isConfirming = false;
+
+  Future<void> _confirmMeal() async {
+    if (_isConfirming) return;
+    setState(() => _isConfirming = true);
+    try {
+      await _foodLogService.addConfirmedMeal(
+        result: widget.result,
+        analysisReference: widget.analysisReference,
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      setState(() => _isConfirming = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final result = widget.result;
     final String detectedFoodsText = result.detectedFoods.isEmpty
         ? 'No food items detected.'
-        : result.detectedFoods
-            .map((food) => '• $food')
-            .join('\n');
+        : result.detectedFoods.map((food) => '• $food').join('\n');
 
-    final int confidencePercent =
-        (result.confidence.clamp(0.0, 1.0) * 100).round();
+    final int confidencePercent = (result.confidence.clamp(0.0, 1.0) * 100)
+        .round();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -40,7 +70,7 @@ class MealAnalysisResultScreen extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: Image.file(
-              imageFile,
+              widget.imageFile,
               width: double.infinity,
               height: 260,
               fit: BoxFit.cover,
@@ -73,19 +103,13 @@ class MealAnalysisResultScreen extends StatelessWidget {
 
           Text(
             'AI confidence: $confidencePercent%',
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppTheme.textSecondary,
-            ),
+            style: const TextStyle(fontSize: 15, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 8),
 
           const Text(
             'Nutrition values are estimates based on the visible meal.',
-            style: TextStyle(
-              fontSize: 15,
-              color: AppTheme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 24),
 
@@ -121,9 +145,7 @@ class MealAnalysisResultScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppTheme.border,
-              ),
+              border: Border.all(color: AppTheme.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,11 +173,18 @@ class MealAnalysisResultScreen extends StatelessWidget {
           const SizedBox(height: 24),
 
           FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text('Done'),
+            onPressed: _isConfirming ? null : _confirmMeal,
+            icon: _isConfirming
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.add_circle_outline),
+            label: Text(_isConfirming ? 'Adding Meal...' : 'Add to Food Log'),
             style: FilledButton.styleFrom(
               backgroundColor: AppTheme.primaryGreen,
               foregroundColor: Colors.white,
@@ -182,9 +211,7 @@ class MealAnalysisResultScreen extends StatelessWidget {
 class _NutritionGrid extends StatelessWidget {
   final List<_NutritionItem> items;
 
-  const _NutritionGrid({
-    required this.items,
-  });
+  const _NutritionGrid({required this.items});
 
   @override
   Widget build(BuildContext context) {
@@ -206,16 +233,11 @@ class _NutritionGrid extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: AppTheme.border,
-            ),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Row(
             children: [
-              Icon(
-                item.icon,
-                color: AppTheme.primaryGreen,
-              ),
+              Icon(item.icon, color: AppTheme.primaryGreen),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
