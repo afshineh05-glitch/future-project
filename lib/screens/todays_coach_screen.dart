@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:future_project/services/adaptive_training_context_service.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
@@ -22,12 +23,10 @@ class TodaysCoachScreen extends StatefulWidget {
   const TodaysCoachScreen({super.key});
 
   @override
-  State<TodaysCoachScreen> createState() =>
-      _TodaysCoachScreenState();
+  State<TodaysCoachScreen> createState() => _TodaysCoachScreenState();
 }
 
-class _TodaysCoachScreenState
-    extends State<TodaysCoachScreen> {
+class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, dynamic>? _foundation;
@@ -47,11 +46,9 @@ class _TodaysCoachScreenState
   bool _isWrapUpSaving = false;
   bool _wrapUpSavedToday = false;
 
-  final TextEditingController _questionController =
-      TextEditingController();
+  final TextEditingController _questionController = TextEditingController();
 
-  final TextEditingController _wrapUpNoteController =
-      TextEditingController();
+  final TextEditingController _wrapUpNoteController = TextEditingController();
 
   @override
   void initState() {
@@ -75,8 +72,7 @@ class _TodaysCoachScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Please sign in to use Today’s Coach.';
+        _errorMessage = 'Please sign in to use Today’s Coach.';
       });
       return;
     }
@@ -95,8 +91,7 @@ class _TodaysCoachScreenState
 
       setState(() {
         _foundation = row;
-        _todayState =
-            row == null ? null : _buildTodayState(row);
+        _todayState = row == null ? null : _buildTodayState(row);
         _smartPriority = null;
         _isPriorityLoading = shouldLoadPriority;
         _smartMorningBrief = null;
@@ -128,14 +123,12 @@ class _TodaysCoachScreenState
         _isWrapUpLoading = false;
         _isWrapUpSaving = false;
         _wrapUpSavedToday = false;
-        _errorMessage =
-            'Could not load your Foundation.';
+        _errorMessage = 'Could not load your Foundation.';
       });
     }
   }
 
-  bool get _foundationCompleted =>
-      _foundation?['is_completed'] == true;
+  bool get _foundationCompleted => _foundation?['is_completed'] == true;
 
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
@@ -143,12 +136,7 @@ class _TodaysCoachScreenState
     }
 
     if (value is Map) {
-      return value.map(
-        (key, item) => MapEntry(
-          key.toString(),
-          item,
-        ),
-      );
+      return value.map((key, item) => MapEntry(key.toString(), item));
     }
 
     return <String, dynamic>{};
@@ -167,10 +155,7 @@ class _TodaysCoachScreenState
     return text.isEmpty ? fallback : text;
   }
 
-  bool _containsContextText(
-    dynamic value,
-    List<String> terms,
-  ) {
+  bool _containsContextText(dynamic value, List<String> terms) {
     if (value == null) return false;
 
     if (value is Map) {
@@ -191,32 +176,22 @@ class _TodaysCoachScreenState
       return false;
     }
 
-    final String normalized =
-        value.toString().trim().toLowerCase();
+    final String normalized = value.toString().trim().toLowerCase();
 
-    return terms.any(
-      (String term) =>
-          normalized.contains(term.toLowerCase()),
-    );
+    return terms.any((String term) => normalized.contains(term.toLowerCase()));
   }
 
   String _nutritionStyle(
     Map<String, dynamic> nutrition,
     Map<String, dynamic> foundation,
   ) {
-    final String nested =
-        _textValue(
-      nutrition,
-      'eating_style',
-      fallback: '',
-    );
+    final String nested = _textValue(nutrition, 'eating_style', fallback: '');
 
     if (nested.isNotEmpty) {
       return nested;
     }
 
-    final dynamic topLevel =
-        foundation['diet_preference'];
+    final dynamic topLevel = foundation['diet_preference'];
 
     return topLevel?.toString().trim() ?? '';
   }
@@ -238,120 +213,76 @@ class _TodaysCoachScreenState
     }
   }
 
-  TodayCoachState _buildTodayState(
-    Map<String, dynamic> foundation,
-  ) {
-    final Map<String, dynamic> lifestyle =
-        _asMap(foundation['lifestyle']);
+  TodayCoachState _buildTodayState(Map<String, dynamic> foundation) {
+    final Map<String, dynamic> lifestyle = _asMap(foundation['lifestyle']);
 
-    final Map<String, dynamic> nutrition =
-        _asMap(foundation['nutrition']);
+    final Map<String, dynamic> nutrition = _asMap(foundation['nutrition']);
 
     final String goal =
-        foundation['primary_goal']?.toString() ??
-        'improve_health';
+        foundation['primary_goal']?.toString() ?? 'improve_health';
 
     final String goalLabel = _goalLabelFor(goal);
 
-    final String sleepQuality =
-        _textValue(
-      lifestyle,
-      'sleep_quality',
-    );
+    final String sleepQuality = _textValue(lifestyle, 'sleep_quality');
 
-    final String sleepHours =
-        _textValue(
-      lifestyle,
-      'sleep_hours',
-    );
+    final String sleepHours = _textValue(lifestyle, 'sleep_hours');
 
-    final String stress =
-        _textValue(
-      lifestyle,
-      'stress',
-    );
+    final String stress = _textValue(lifestyle, 'stress');
 
-    final String obstacle =
-        _textValue(
-      lifestyle,
-      'obstacle',
-      fallback: '',
-    );
+    final String obstacle = _textValue(lifestyle, 'obstacle', fallback: '');
 
-    final String workoutTime =
-        _textValue(
+    final String workoutTime = _textValue(
       lifestyle,
       'workout_time',
       fallback: '',
     );
 
-    final String eatingStyle =
-        _nutritionStyle(
-      nutrition,
-      foundation,
-    );
+    final String eatingStyle = _nutritionStyle(nutrition, foundation);
 
-    final String nutritionChallenge =
-        _textValue(
+    final String nutritionChallenge = _textValue(
       nutrition,
       'nutrition_challenge',
       fallback: '',
     );
 
     final bool limitedSleep =
-        sleepHours == 'Less than 5 Hours' ||
-        sleepHours == '5–6 Hours';
+        sleepHours == 'Less than 5 Hours' || sleepHours == '5–6 Hours';
 
-    final bool highStress =
-        stress == 'High' ||
-        stress == 'Very High';
+    final bool highStress = stress == 'High' || stress == 'Very High';
 
     // This intentionally scans existing Foundation data rather than depending
     // on one exact field name. If fasting is stored later in Foundation or a
     // connected nutrition context, Today’s Priority can recognize it without
     // needing another UI card or a hardcoded one-field dependency.
-    final bool fastingContext =
-        _containsContextText(
-      foundation,
-      <String>[
-        'fasting',
-        'intermittent fast',
-        'intermittent fasting',
-        'time restricted eating',
-        'time-restricted eating',
-        'ramadan',
-      ],
-    );
+    final bool fastingContext = _containsContextText(foundation, <String>[
+      'fasting',
+      'intermittent fast',
+      'intermittent fasting',
+      'time restricted eating',
+      'time-restricted eating',
+      'ramadan',
+    ]);
 
     final bool ketoContext =
         eatingStyle.toLowerCase() == 'keto' ||
-        _containsContextText(
-          nutrition,
-          <String>['keto', 'ketogenic'],
-        );
+        _containsContextText(nutrition, <String>['keto', 'ketogenic']);
 
     final bool lowCarbContext =
         eatingStyle.toLowerCase() == 'low carb' ||
-        _containsContextText(
-          nutrition,
-          <String>['low carb', 'low-carb'],
-        );
+        _containsContextText(nutrition, <String>['low carb', 'low-carb']);
 
     final bool highProteinContext =
         eatingStyle.toLowerCase() == 'high protein' ||
-        _containsContextText(
-          nutrition,
-          <String>['high protein', 'high-protein'],
-        );
+        _containsContextText(nutrition, <String>[
+          'high protein',
+          'high-protein',
+        ]);
 
-    final bool vegetarianContext =
-        eatingStyle.toLowerCase() == 'vegetarian';
+    final bool vegetarianContext = eatingStyle.toLowerCase() == 'vegetarian';
 
-    final bool veganContext =
-        eatingStyle.toLowerCase() == 'vegan';
+    final bool veganContext = eatingStyle.toLowerCase() == 'vegan';
 
-    final bool pescatarianContext =
-        eatingStyle.toLowerCase() == 'pescatarian';
+    final bool pescatarianContext = eatingStyle.toLowerCase() == 'pescatarian';
 
     String priority;
 
@@ -417,8 +348,7 @@ class _TodaysCoachScreenState
     } else if (nutritionChallenge == 'Eating Out Too Often') {
       priority =
           'Keep today close to your normal nutrition routine and avoid letting convenience replace the plan you already chose.';
-    } else if (obstacle == 'Lack of Time' ||
-        obstacle == 'Busy Schedule') {
+    } else if (obstacle == 'Lack of Time' || obstacle == 'Busy Schedule') {
       priority = workoutTime.isEmpty
           ? 'Protect one realistic block of time for your health today and treat it as non-negotiable.'
           : 'Protect your $workoutTime health block today. Keep that time clear and make consistency the priority.';
@@ -463,20 +393,15 @@ class _TodaysCoachScreenState
 
     String? reminder;
 
-    if (sleepHours == 'Less than 5 Hours' ||
-        sleepHours == '5–6 Hours') {
-      reminder =
-          'Recovery may need extra attention today.';
-    } else if (stress == 'High' ||
-        stress == 'Very High') {
-      reminder =
-          'Your stress is usually high. Keep today realistic.';
+    if (sleepHours == 'Less than 5 Hours' || sleepHours == '5–6 Hours') {
+      reminder = 'Recovery may need extra attention today.';
+    } else if (stress == 'High' || stress == 'Very High') {
+      reminder = 'Your stress is usually high. Keep today realistic.';
     }
 
     final String morningBrief;
 
-    if (sleepQuality != 'Not set' &&
-        stress != 'Not set') {
+    if (sleepQuality != 'Not set' && stress != 'Not set') {
       morningBrief =
           'Your current goal is $goalLabel. '
           'Your usual sleep quality is $sleepQuality '
@@ -541,9 +466,7 @@ class _TodaysCoachScreenState
   Future<void> _openFoundation() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const MyFoundationScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const MyFoundationScreen()),
     );
 
     if (!mounted) return;
@@ -573,28 +496,26 @@ class _TodaysCoachScreenState
     ];
 
     try {
-      final FunctionResponse response =
-          await Supabase.instance.client.functions.invoke(
-        'todays-coach',
-        body: <String, dynamic>{
-          'action': 'generate_morning_brief',
-          'dailyContext': <String, dynamic>{
-            'localDate':
-                '${now.year.toString().padLeft(4, '0')}-'
-                '${now.month.toString().padLeft(2, '0')}-'
-                '${now.day.toString().padLeft(2, '0')}',
-            'localHour': now.hour,
-            'weekday': weekdays[now.weekday - 1],
-          },
-        },
-      );
+      final FunctionResponse response = await Supabase.instance.client.functions
+          .invoke(
+            'todays-coach',
+            body: <String, dynamic>{
+              'action': 'generate_morning_brief',
+              'dailyContext': <String, dynamic>{
+                'localDate':
+                    '${now.year.toString().padLeft(4, '0')}-'
+                    '${now.month.toString().padLeft(2, '0')}-'
+                    '${now.day.toString().padLeft(2, '0')}',
+                'localHour': now.hour,
+                'weekday': weekdays[now.weekday - 1],
+              },
+            },
+          );
 
       final dynamic data = response.data;
 
-      if (data is Map &&
-          data['morningBrief'] != null) {
-        final String value =
-            data['morningBrief'].toString().trim();
+      if (data is Map && data['morningBrief'] != null) {
+        final String value = data['morningBrief'].toString().trim();
 
         if (value.isNotEmpty && mounted) {
           setState(() {
@@ -603,9 +524,7 @@ class _TodaysCoachScreenState
         }
       }
     } catch (error) {
-      debugPrint(
-        'Smart Morning Brief fallback used: $error',
-      );
+      debugPrint('Smart Morning Brief fallback used: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -638,28 +557,32 @@ class _TodaysCoachScreenState
     ];
 
     try {
-      final FunctionResponse response =
-          await Supabase.instance.client.functions.invoke(
-        'todays-coach',
-        body: <String, dynamic>{
-          'action': 'generate_priority',
-          'dailyContext': <String, dynamic>{
-            'localDate':
-                '${now.year.toString().padLeft(4, '0')}-'
-                '${now.month.toString().padLeft(2, '0')}-'
-                '${now.day.toString().padLeft(2, '0')}',
-            'localHour': now.hour,
-            'weekday': weekdays[now.weekday - 1],
-            'priority': _todayState!.priority,
-          },
-        },
+      final adaptiveContext = await AdaptiveTrainingContextService().load(
+        now: now,
       );
+      final FunctionResponse response = await Supabase.instance.client.functions
+          .invoke(
+            'todays-coach',
+            body: <String, dynamic>{
+              'action': 'generate_priority',
+              'dailyContext': <String, dynamic>{
+                'localDate':
+                    '${now.year.toString().padLeft(4, '0')}-'
+                    '${now.month.toString().padLeft(2, '0')}-'
+                    '${now.day.toString().padLeft(2, '0')}',
+                'localHour': now.hour,
+                'weekday': weekdays[now.weekday - 1],
+                'priority': _todayState!.priority,
+                if (adaptiveContext != null)
+                  'adaptiveTraining': adaptiveContext.toMap(),
+              },
+            },
+          );
 
       final dynamic data = response.data;
 
       if (data is Map && data['priority'] != null) {
-        final String value =
-            data['priority'].toString().trim();
+        final String value = data['priority'].toString().trim();
 
         if (value.isNotEmpty && mounted) {
           setState(() {
@@ -670,9 +593,7 @@ class _TodaysCoachScreenState
     } catch (error) {
       // If the AI/cache request fails, the local rule-based priority remains
       // available as a safe fallback after loading finishes.
-      debugPrint(
-        'Smart Priority fallback used: $error',
-      );
+      debugPrint('Smart Priority fallback used: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -705,26 +626,21 @@ class _TodaysCoachScreenState
     try {
       final Map<String, dynamic>? row = await supabase
           .from('coach_daily_history')
-          .select(
-            'wrap_up_status, wrap_up_note',
-          )
+          .select('wrap_up_status, wrap_up_note')
           .eq('user_id', user.id)
           .eq('day', _todayDatabaseDate)
           .maybeSingle();
 
       if (!mounted) return;
 
-      final String? status =
-          row?['wrap_up_status']?.toString();
+      final String? status = row?['wrap_up_status']?.toString();
 
-      final String note =
-          row?['wrap_up_note']?.toString() ?? '';
+      final String note = row?['wrap_up_note']?.toString() ?? '';
 
       setState(() {
-        _wrapUpStatus =
-            status == null || status.trim().isEmpty
-                ? null
-                : status.trim();
+        _wrapUpStatus = status == null || status.trim().isEmpty
+            ? null
+            : status.trim();
         _wrapUpNoteController.text = note;
         _wrapUpSavedToday = row != null;
         _isWrapUpLoading = false;
@@ -736,9 +652,7 @@ class _TodaysCoachScreenState
         _isWrapUpLoading = false;
       });
 
-      debugPrint(
-        'Could not load today wrap-up: $error',
-      );
+      debugPrint('Could not load today wrap-up: $error');
     }
   }
 
@@ -754,40 +668,27 @@ class _TodaysCoachScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please sign in to save your wrap-up.',
-          ),
-        ),
+        const SnackBar(content: Text('Please sign in to save your wrap-up.')),
       );
       return;
     }
 
-    final bool wasAlreadySaved =
-        _wrapUpSavedToday;
+    final bool wasAlreadySaved = _wrapUpSavedToday;
 
     setState(() {
       _isWrapUpSaving = true;
     });
 
-    final String note =
-        _wrapUpNoteController.text.trim();
+    final String note = _wrapUpNoteController.text.trim();
 
     try {
-      await supabase
-          .from('coach_daily_history')
-          .upsert(
-        <String, dynamic>{
-          'user_id': user.id,
-          'day': _todayDatabaseDate,
-          'wrap_up_status': _wrapUpStatus,
-          'wrap_up_note':
-              note.isEmpty ? null : note,
-          'updated_at':
-              DateTime.now().toUtc().toIso8601String(),
-        },
-        onConflict: 'user_id,day',
-      );
+      await supabase.from('coach_daily_history').upsert(<String, dynamic>{
+        'user_id': user.id,
+        'day': _todayDatabaseDate,
+        'wrap_up_status': _wrapUpStatus,
+        'wrap_up_note': note.isEmpty ? null : note,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'user_id,day');
 
       if (!mounted) return;
 
@@ -813,11 +714,7 @@ class _TodaysCoachScreenState
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not save wrap-up: ${error.message}',
-          ),
-        ),
+        SnackBar(content: Text('Could not save wrap-up: ${error.message}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -826,19 +723,14 @@ class _TodaysCoachScreenState
         _isWrapUpSaving = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not save wrap-up: $error',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save wrap-up: $error')));
     }
   }
 
   Future<void> _submitQuestion() async {
-    final String question =
-        _questionController.text.trim();
+    final String question = _questionController.text.trim();
 
     if (question.isEmpty || _isSendingQuestion) return;
 
@@ -851,20 +743,20 @@ class _TodaysCoachScreenState
     });
 
     try {
-      final FunctionResponse response =
-          await Supabase.instance.client.functions.invoke(
-        'todays-coach',
-        body: <String, dynamic>{
-          'question': question,
-          'foundation': _foundation ?? <String, dynamic>{},
-          'dailyContext': <String, dynamic>{
-            'morningBrief': _todayState?.morningBrief,
-            'priority': _todayState?.priority,
-            'reminder': _todayState?.reminder,
-            'eveningWrapUp': _todayState?.eveningWrapUp,
-          },
-        },
-      );
+      final FunctionResponse response = await Supabase.instance.client.functions
+          .invoke(
+            'todays-coach',
+            body: <String, dynamic>{
+              'question': question,
+              'foundation': _foundation ?? <String, dynamic>{},
+              'dailyContext': <String, dynamic>{
+                'morningBrief': _todayState?.morningBrief,
+                'priority': _todayState?.priority,
+                'reminder': _todayState?.reminder,
+                'eveningWrapUp': _todayState?.eveningWrapUp,
+              },
+            },
+          );
 
       final dynamic data = response.data;
 
@@ -885,15 +777,11 @@ class _TodaysCoachScreenState
       } else if (data is Map && data['error'] != null) {
         throw Exception(data['error'].toString());
       } else {
-        throw Exception(
-          'Today’s Coach returned an invalid response.',
-        );
+        throw Exception('Today’s Coach returned an invalid response.');
       }
 
       if (answer.isEmpty) {
-        throw Exception(
-          'Today’s Coach returned an empty response.',
-        );
+        throw Exception('Today’s Coach returned an empty response.');
       }
 
       if (!mounted) return;
@@ -927,11 +815,7 @@ class _TodaysCoachScreenState
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not reach Today’s Coach: $error',
-          ),
-        ),
+        SnackBar(content: Text('Could not reach Today’s Coach: $error')),
       );
     }
   }
@@ -943,9 +827,7 @@ class _TodaysCoachScreenState
       appBar: AppBar(
         title: const Text(
           'Today’s Coach',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.textPrimary,
@@ -957,9 +839,7 @@ class _TodaysCoachScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
@@ -972,8 +852,7 @@ class _TodaysCoachScreenState
 
     if (_todayState == null) {
       return _buildErrorState(
-        message:
-            'Could not prepare Today’s Coach for this Foundation.',
+        message: 'Could not prepare Today’s Coach for this Foundation.',
       );
     }
 
@@ -981,12 +860,7 @@ class _TodaysCoachScreenState
       onRefresh: _loadFoundation,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          24,
-          16,
-          24,
-          32,
-        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
         children: <Widget>[
           _buildHeader(),
           const SizedBox(height: 22),
@@ -1008,9 +882,7 @@ class _TodaysCoachScreenState
     );
   }
 
-  Widget _buildErrorState({
-    String? message,
-  }) {
+  Widget _buildErrorState({String? message}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1049,16 +921,12 @@ class _TodaysCoachScreenState
         padding: const EdgeInsets.all(24),
         child: Container(
           width: double.infinity,
-          constraints: const BoxConstraints(
-            maxWidth: 720,
-          ),
+          constraints: const BoxConstraints(maxWidth: 720),
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppTheme.border,
-            ),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1099,12 +967,8 @@ class _TodaysCoachScreenState
               const SizedBox(height: 22),
               FilledButton.icon(
                 onPressed: _openFoundation,
-                icon: const Icon(
-                  Icons.account_tree_outlined,
-                ),
-                label: const Text(
-                  'Open My Foundation',
-                ),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Open My Foundation'),
               ),
             ],
           ),
@@ -1128,10 +992,7 @@ class _TodaysCoachScreenState
         const SizedBox(height: 5),
         Text(
           _dateLabel,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppTheme.textSecondary,
-          ),
+          style: const TextStyle(fontSize: 15, color: AppTheme.textSecondary),
         ),
       ],
     );
@@ -1148,23 +1009,17 @@ class _TodaysCoachScreenState
                 SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 10),
                 Text(
                   'Preparing your morning brief...',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: AppTheme.textSecondary,
-                  ),
+                  style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
                 ),
               ],
             )
           : Text(
-              _smartMorningBrief ??
-                  _todayState!.morningBrief,
+              _smartMorningBrief ?? _todayState!.morningBrief,
               style: const TextStyle(
                 fontSize: 15,
                 height: 1.55,
@@ -1182,9 +1037,7 @@ class _TodaysCoachScreenState
         color: AppTheme.calorieCard,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: AppTheme.primaryGreen.withValues(
-            alpha: 0.35,
-          ),
+          color: AppTheme.primaryGreen.withValues(alpha: 0.35),
         ),
       ),
       child: Row(
@@ -1198,8 +1051,7 @@ class _TodaysCoachScreenState
           const SizedBox(width: 16),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Today’s Priority',
@@ -1217,9 +1069,7 @@ class _TodaysCoachScreenState
                       SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                       SizedBox(width: 10),
                       Text(
@@ -1271,19 +1121,13 @@ class _TodaysCoachScreenState
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: AppTheme.border,
-        ),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_lastQuestion != null) ...[
-            _ChatBubble(
-              label: 'You',
-              text: _lastQuestion!,
-              isCoach: false,
-            ),
+            _ChatBubble(label: 'You', text: _lastQuestion!, isCoach: false),
             const SizedBox(height: 10),
           ],
           if (_isSendingQuestion) ...[
@@ -1310,27 +1154,21 @@ class _TodaysCoachScreenState
                     }
                   },
                   decoration: const InputDecoration(
-                    hintText:
-                        'What should I focus on today?',
+                    hintText: 'What should I focus on today?',
                     border: InputBorder.none,
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               IconButton.filled(
-                onPressed:
-                    _isSendingQuestion ? null : _submitQuestion,
+                onPressed: _isSendingQuestion ? null : _submitQuestion,
                 icon: _isSendingQuestion
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
                       )
-                    : const Icon(
-                        Icons.arrow_upward,
-                      ),
+                    : const Icon(Icons.arrow_upward),
               ),
             ],
           ),
@@ -1340,8 +1178,7 @@ class _TodaysCoachScreenState
   }
 
   Widget _buildEveningWrapUp() {
-    final bool evening =
-        DateTime.now().hour >= 18;
+    final bool evening = DateTime.now().hour >= 18;
 
     if (!evening) {
       return _CoachCard(
@@ -1368,17 +1205,12 @@ class _TodaysCoachScreenState
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: 10),
             Text(
               'Loading today’s wrap-up...',
-              style: TextStyle(
-                fontSize: 15,
-                color: AppTheme.textSecondary,
-              ),
+              style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -1406,8 +1238,7 @@ class _TodaysCoachScreenState
             children: [
               _WrapUpChoice(
                 label: 'On track',
-                selected:
-                    _wrapUpStatus == 'on_track',
+                selected: _wrapUpStatus == 'on_track',
                 onTap: () {
                   setState(() {
                     _wrapUpStatus = 'on_track';
@@ -1416,19 +1247,16 @@ class _TodaysCoachScreenState
               ),
               _WrapUpChoice(
                 label: 'Partly on track',
-                selected:
-                    _wrapUpStatus == 'partly_on_track',
+                selected: _wrapUpStatus == 'partly_on_track',
                 onTap: () {
                   setState(() {
-                    _wrapUpStatus =
-                        'partly_on_track';
+                    _wrapUpStatus = 'partly_on_track';
                   });
                 },
               ),
               _WrapUpChoice(
                 label: 'Off track',
-                selected:
-                    _wrapUpStatus == 'off_track',
+                selected: _wrapUpStatus == 'off_track',
                 onTap: () {
                   setState(() {
                     _wrapUpStatus = 'off_track';
@@ -1446,23 +1274,16 @@ class _TodaysCoachScreenState
             maxLength: 500,
             decoration: InputDecoration(
               labelText: 'Anything worth noting? (optional)',
-              hintText:
-                  'Example: Low energy today or missed my workout.',
+              hintText: 'Example: Low energy today or missed my workout.',
               filled: true,
               fillColor: AppTheme.background,
               border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(16),
-                borderSide: BorderSide(
-                  color: AppTheme.border,
-                ),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(16),
-                borderSide: BorderSide(
-                  color: AppTheme.border,
-                ),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
             ),
           ),
@@ -1470,19 +1291,14 @@ class _TodaysCoachScreenState
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed:
-                  _wrapUpStatus == null ||
-                          _isWrapUpSaving
-                      ? null
-                      : _saveEveningWrapUp,
+              onPressed: _wrapUpStatus == null || _isWrapUpSaving
+                  ? null
+                  : _saveEveningWrapUp,
               icon: _isWrapUpSaving
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child:
-                          CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(
                       _wrapUpSavedToday
@@ -1493,8 +1309,8 @@ class _TodaysCoachScreenState
                 _isWrapUpSaving
                     ? 'Saving...'
                     : _wrapUpSavedToday
-                        ? 'Update Wrap-up'
-                        : 'Save Wrap-up',
+                    ? 'Update Wrap-up'
+                    : 'Save Wrap-up',
               ),
             ),
           ),
@@ -1502,7 +1318,6 @@ class _TodaysCoachScreenState
       ),
     );
   }
-
 }
 
 class _WrapUpChoice extends StatelessWidget {
@@ -1524,23 +1339,13 @@ class _WrapUpChoice extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
-          duration: const Duration(
-            milliseconds: 160,
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: selected
-                ? AppTheme.calorieCard
-                : AppTheme.background,
-            borderRadius:
-                BorderRadius.circular(14),
+            color: selected ? AppTheme.calorieCard : AppTheme.background,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected
-                  ? AppTheme.primaryGreen
-                  : AppTheme.border,
+              color: selected ? AppTheme.primaryGreen : AppTheme.border,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -1548,9 +1353,7 @@ class _WrapUpChoice extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                selected
-                    ? Icons.check_circle
-                    : Icons.circle_outlined,
+                selected ? Icons.check_circle : Icons.circle_outlined,
                 size: 19,
                 color: selected
                     ? AppTheme.primaryGreen
@@ -1589,17 +1392,12 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment:
-          isCoach ? Alignment.centerLeft : Alignment.centerRight,
+      alignment: isCoach ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
-        constraints: const BoxConstraints(
-          maxWidth: 760,
-        ),
+        constraints: const BoxConstraints(maxWidth: 760),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isCoach
-              ? AppTheme.calorieCard
-              : AppTheme.background,
+          color: isCoach ? AppTheme.calorieCard : AppTheme.background,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: isCoach
@@ -1615,9 +1413,7 @@ class _ChatBubble extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: isCoach
-                    ? AppTheme.primaryGreen
-                    : AppTheme.textSecondary,
+                color: isCoach ? AppTheme.primaryGreen : AppTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 6),
@@ -1644,17 +1440,12 @@ class _CoachThinkingBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 13,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
           color: AppTheme.calorieCard,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: AppTheme.primaryGreen.withValues(
-              alpha: 0.25,
-            ),
+            color: AppTheme.primaryGreen.withValues(alpha: 0.25),
           ),
         ),
         child: const Row(
@@ -1663,17 +1454,12 @@ class _CoachThinkingBubble extends StatelessWidget {
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: 10),
             Text(
               'Today’s Coach is thinking...',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-              ),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -1686,10 +1472,7 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -1737,9 +1520,7 @@ class _CoachCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: AppTheme.border,
-        ),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1751,13 +1532,9 @@ class _CoachCard extends StatelessWidget {
                 height: 46,
                 decoration: BoxDecoration(
                   color: AppTheme.calorieCard,
-                  borderRadius:
-                      BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(
-                  icon,
-                  color: AppTheme.primaryGreen,
-                ),
+                child: Icon(icon, color: AppTheme.primaryGreen),
               ),
               const SizedBox(width: 13),
               Text(

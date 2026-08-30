@@ -19,6 +19,11 @@ dependencies:
   supabase_flutter: ^2.16.0
   flutter_svg: ^2.2.0
   video_player: ^2.14.0
+  audioplayers: ^6.8.1
+  cryptography: ^2.9.0
+  flutter_secure_storage: ^11.0.0
+  path_provider: ^2.1.5
+  record: ^7.1.1
 
 dev_dependencies:
   flutter_test:
