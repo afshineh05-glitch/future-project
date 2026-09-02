@@ -48,6 +48,53 @@ void main() {
     );
   });
 
+  test('wrong user fails because AES-GCM binds content to its owner', () async {
+    final encrypted = await service.encryptText(
+      plaintext: 'private',
+      keyBytes: key,
+      userId: 'user-a',
+    );
+
+    expect(
+      () => service.decryptText(
+        payload: encrypted,
+        keyBytes: key,
+        userId: 'user-b',
+      ),
+      throwsA(isA<MyWhyDecryptionException>()),
+    );
+  });
+
+  test('accessible V1 payload can be read and re-encrypted as V2', () async {
+    final legacy = await service.encryptText(
+      plaintext: 'legacy private reason',
+      keyBytes: key,
+      userId: 'user-a',
+      version: MyWhyEncryptionService.legacyVersion,
+    );
+    final clear = await service.decryptText(
+      payload: legacy,
+      keyBytes: key,
+      userId: 'user-a',
+    );
+    final migrated = await service.encryptText(
+      plaintext: clear,
+      keyBytes: key,
+      userId: 'user-a',
+    );
+
+    expect(legacy.version, MyWhyEncryptionService.legacyVersion);
+    expect(migrated.version, MyWhyEncryptionService.currentVersion);
+    expect(
+      await service.decryptText(
+        payload: migrated,
+        keyBytes: key,
+        userId: 'user-a',
+      ),
+      clear,
+    );
+  });
+
   test('unsupported payload version fails explicitly', () async {
     final payload = MyWhyEncryptedPayload(
       cipherText: Uint8List(1),

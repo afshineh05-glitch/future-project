@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
+import 'package:future_project/screens/body_progress_screen.dart';
 import 'package:future_project/screens/nutrition_home_screen.dart';
 import 'package:future_project/screens/todays_coach_screen.dart';
 import 'package:future_project/screens/training_plan_screen.dart';
@@ -126,6 +127,21 @@ class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
     );
   }
 
+  void _openBodyProgress() {
+    if (!_foundationCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete My Foundation to unlock Body Progress.'),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BodyProgressScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -183,9 +199,10 @@ class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
             const SizedBox(height: 14),
             _CoachModuleCard(
               icon: Icons.insights_outlined,
-              title: 'Progress',
-              subtitle: 'Track measurements and performance.',
+              title: 'Body Progress',
+              subtitle: 'Check in on your measurements every 3 weeks.',
               locked: !_foundationCompleted,
+              onTap: _openBodyProgress,
             ),
             const SizedBox(height: 14),
             _CoachModuleCard(

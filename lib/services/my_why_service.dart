@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:future_project/models/my_why_entry.dart';
 import 'package:future_project/services/my_why_encryption_service.dart';
 import 'package:future_project/services/my_why_key_store.dart';
+import 'package:future_project/services/my_why_recovery_key_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -22,15 +23,25 @@ class MyWhyService {
   final SupabaseClient _supabase;
   final MyWhyEncryptionService _encryption;
   final MyWhyKeyStore _keyStore;
+  final MyWhyRecoveryKeyService _recoveryKeys;
   final Set<String> _temporaryPlaybackPaths = {};
 
   MyWhyService({
     SupabaseClient? supabase,
     MyWhyEncryptionService? encryption,
     MyWhyKeyStore? keyStore,
+    MyWhyRecoveryKeyService? recoveryKeys,
   }) : _supabase = supabase ?? Supabase.instance.client,
        _encryption = encryption ?? MyWhyEncryptionService(),
-       _keyStore = keyStore ?? const PlatformMyWhyKeyStore();
+       _keyStore = keyStore ?? const PlatformMyWhyKeyStore(),
+       _recoveryKeys =
+           recoveryKeys ??
+           MyWhyRecoveryKeyService(
+             cache: const PlatformMyWhyRecoveryKeyCache(),
+             api: SupabaseMyWhyRecoveryKeyApi(
+               supabase ?? Supabase.instance.client,
+             ),
+           );
 
   Future<MyWhyViewState> load({String? legacyPlaintext}) async {
     final user = _requireUser();
@@ -43,22 +54,38 @@ class MyWhyService {
       await _clearLegacyPlaintext(user.id);
       migrated = true;
     } else if (legacy.isNotEmpty && entry?.hasText == true) {
-      await _decryptEntryText(entry!, user.id);
+      if (entry!.isLegacyV1) {
+        entry = await _migrateLegacyV1Entry(entry, user.id);
+      }
+      await _decryptEntryText(entry, user.id);
       await _clearLegacyPlaintext(user.id);
       migrated = true;
     }
 
-    final text = entry?.hasText == true
+    var hasUnrecoverableLegacy = false;
+    if (entry?.isLegacyV1 == true) {
+      try {
+        entry = await _migrateLegacyV1Entry(entry!, user.id);
+      } on MyWhyLegacyUnrecoverableException {
+        hasUnrecoverableLegacy = true;
+      }
+    }
+
+    final text = !hasUnrecoverableLegacy && entry?.hasText == true
         ? await _decryptEntryText(entry!, user.id)
         : null;
     return MyWhyViewState(
       entry: entry,
       text: text,
       migratedLegacyText: migrated,
+      hasUnrecoverableLegacy: hasUnrecoverableLegacy,
     );
   }
 
-  Future<MyWhyEntry> saveText(String text) async {
+  Future<MyWhyEntry> saveText(
+    String text, {
+    bool startFreshIfLegacyUnrecoverable = false,
+  }) async {
     final normalized = text.trim();
     if (normalized.length > maxTextCharacters) {
       throw const MyWhyValidationException(
@@ -66,8 +93,11 @@ class MyWhyService {
       );
     }
     final user = _requireUser();
-    final existing = await _loadEntry(user.id);
     if (normalized.isEmpty) {
+      final existing = await _prepareForV2Write(
+        user.id,
+        startFreshIfLegacyUnrecoverable: false,
+      );
       if (existing == null) {
         throw const MyWhyValidationException(
           'There is no My Why text to save.',
@@ -80,11 +110,15 @@ class MyWhyService {
         'updated_at': _now(),
       });
     }
-    final key = await _keyForWrite(user.id, existing != null);
+    final key = await _v2KeyForWrite(user.id);
     final payload = await _encryption.encryptText(
       plaintext: normalized,
       keyBytes: key,
       userId: user.id,
+    );
+    await _prepareForV2Write(
+      user.id,
+      startFreshIfLegacyUnrecoverable: startFreshIfLegacyUnrecoverable,
     );
     return _upsertAndReturn({
       'user_id': user.id,
@@ -102,17 +136,21 @@ class MyWhyService {
     required Duration duration,
     required String playbackExtension,
     required String playbackMimeType,
+    bool startFreshIfLegacyUnrecoverable = false,
   }) async {
     _validateMedia(kind, clearBytes.length, duration);
     final user = _requireUser();
-    final existing = await _loadEntry(user.id);
-    final key = await _keyForWrite(user.id, existing != null);
+    final key = await _v2KeyForWrite(user.id);
     final purpose = kind.name;
     final encrypted = await _encryption.encryptBytes(
       plaintext: clearBytes,
       keyBytes: key,
       userId: user.id,
       purpose: purpose,
+    );
+    final existing = await _prepareForV2Write(
+      user.id,
+      startFreshIfLegacyUnrecoverable: startFreshIfLegacyUnrecoverable,
     );
     final path = '${user.id}/$purpose/${_randomObjectName()}.bin';
     await _supabase.storage
@@ -192,7 +230,7 @@ class MyWhyService {
         'This private media is unavailable.',
       );
     }
-    final key = await _requiredKey(user.id);
+    final key = await _keyForEntry(entry, user.id);
     final encrypted = await _supabase.storage.from(bucket).download(path);
     final clear = await _encryption.decryptBytes(
       payload: MyWhyEncryptedPayload.fromBase64(
@@ -206,10 +244,12 @@ class MyWhyService {
       purpose: kind.name,
     );
     final directory = await getTemporaryDirectory();
-    final extension = _safeExtension(
-      metadata['playback_extension']?.toString() ??
-          (kind == MyWhyMediaKind.voice ? 'm4a' : 'mp4'),
-    );
+    final extension = Platform.isWindows && kind == MyWhyMediaKind.voice
+        ? 'aac'
+        : _safeExtension(
+            metadata['playback_extension']?.toString() ??
+                (kind == MyWhyMediaKind.voice ? 'm4a' : 'mp4'),
+          );
     final file = File(
       '${directory.path}${Platform.pathSeparator}my_why_${kind.name}_${DateTime.now().microsecondsSinceEpoch}.$extension',
     );
@@ -261,6 +301,7 @@ class MyWhyService {
     }
     await clearPlaybackFiles();
     await _keyStore.delete(user.id);
+    await _recoveryKeys.delete(user.id);
   }
 
   Future<void> clearPlaybackFiles() async {
@@ -285,7 +326,7 @@ class MyWhyService {
   }
 
   Future<String> _decryptEntryText(MyWhyEntry entry, String userId) async {
-    final key = await _requiredKey(userId);
+    final key = await _keyForEntry(entry, userId);
     return _encryption.decryptText(
       payload: MyWhyEncryptedPayload.fromBase64(
         cipherText: entry.encryptedTextPayload!,
@@ -298,15 +339,188 @@ class MyWhyService {
     );
   }
 
-  Future<List<int>> _requiredKey(String userId) async =>
+  Future<List<int>> _requiredLegacyV1Key(String userId) async =>
       await _keyStore.read(userId) ??
-      (throw const MyWhyKeyUnavailableException());
+      (throw const MyWhyLegacyUnrecoverableException());
 
-  Future<List<int>> _keyForWrite(String userId, bool entryExists) async {
-    final key = await _keyStore.read(userId);
-    if (key != null) return key;
-    if (entryExists) throw const MyWhyKeyUnavailableException();
-    return _keyStore.create(userId);
+  Future<List<int>> _v2KeyForWrite(String userId) =>
+      _recoveryKeys.recoverOrCreate(userId);
+
+  Future<MyWhyEntry?> _prepareForV2Write(
+    String userId, {
+    required bool startFreshIfLegacyUnrecoverable,
+  }) async {
+    final existing = await _loadEntry(userId);
+    if (existing?.isLegacyV1 != true) return existing;
+    try {
+      return await _migrateLegacyV1Entry(existing!, userId);
+    } on MyWhyLegacyUnrecoverableException {
+      if (!startFreshIfLegacyUnrecoverable) rethrow;
+      return _archiveLegacyAndStartFresh(userId);
+    }
+  }
+
+  Future<MyWhyEntry> _archiveLegacyAndStartFresh(String userId) async {
+    final row = await _supabase.rpc('archive_legacy_my_why_and_start_v2');
+    if (row is! Map) {
+      throw const MyWhyPartialFailureException(
+        'The legacy My Why could not be preserved, so no new content was saved.',
+      );
+    }
+    return MyWhyEntry.fromMap(Map<String, dynamic>.from(row));
+  }
+
+  Future<List<int>> _keyForEntry(MyWhyEntry entry, String userId) =>
+      entry.isLegacyV1
+      ? _requiredLegacyV1Key(userId)
+      : _recoveryKeys.recoverOrCreate(userId);
+
+  Future<MyWhyEntry> _migrateLegacyV1Entry(
+    MyWhyEntry entry,
+    String userId,
+  ) async {
+    final legacyKey = await _requiredLegacyV1Key(userId);
+    final recoveredKey = await _recoveryKeys.registerLegacyKey(
+      userId,
+      legacyKey,
+    );
+    final uploadedPaths = <String>[];
+    try {
+      final values = <String, dynamic>{
+        'encryption_version': MyWhyEncryptionService.currentVersion,
+        'updated_at': _now(),
+      };
+      if (entry.hasText) {
+        final clear = await _encryption.decryptText(
+          payload: MyWhyEncryptedPayload.fromBase64(
+            cipherText: entry.encryptedTextPayload!,
+            nonce: entry.encryptedTextNonce!,
+            mac: entry.encryptedTextMac!,
+            version: entry.encryptionVersion,
+          ),
+          keyBytes: legacyKey,
+          userId: userId,
+        );
+        final encrypted = await _encryption.encryptText(
+          plaintext: clear,
+          keyBytes: recoveredKey,
+          userId: userId,
+        );
+        values.addAll({
+          'encrypted_text_payload': encrypted.cipherTextBase64,
+          'encrypted_text_nonce': encrypted.nonceBase64,
+          'encrypted_text_mac': encrypted.macBase64,
+        });
+      }
+      final voice = await _migrateLegacyMedia(
+        entry: entry,
+        kind: MyWhyMediaKind.voice,
+        legacyKey: legacyKey,
+        recoveredKey: recoveredKey,
+        uploadedPaths: uploadedPaths,
+      );
+      final video = await _migrateLegacyMedia(
+        entry: entry,
+        kind: MyWhyMediaKind.video,
+        legacyKey: legacyKey,
+        recoveredKey: recoveredKey,
+        uploadedPaths: uploadedPaths,
+      );
+      if (voice != null) values.addAll(voice.databaseValues);
+      if (video != null) values.addAll(video.databaseValues);
+      final updated = await _updateAndReturn(userId, values);
+      await _keyStore.delete(userId);
+      final oldPaths = [
+        if (voice != null) voice.oldPath,
+        if (video != null) video.oldPath,
+      ];
+      if (oldPaths.isNotEmpty) {
+        try {
+          await _supabase.storage.from(bucket).remove(oldPaths);
+        } catch (_) {
+          // The V2 database record is authoritative; orphan cleanup is safe to retry later.
+        }
+      }
+      return updated;
+    } catch (_) {
+      if (uploadedPaths.isNotEmpty) {
+        try {
+          await _supabase.storage.from(bucket).remove(uploadedPaths);
+        } catch (_) {}
+      }
+      rethrow;
+    }
+  }
+
+  Future<_MigratedMyWhyMedia?> _migrateLegacyMedia({
+    required MyWhyEntry entry,
+    required MyWhyMediaKind kind,
+    required List<int> legacyKey,
+    required List<int> recoveredKey,
+    required List<String> uploadedPaths,
+  }) async {
+    final path = kind == MyWhyMediaKind.voice
+        ? entry.voiceStoragePath
+        : entry.videoStoragePath;
+    if (path == null) return null;
+    final nonce = kind == MyWhyMediaKind.voice
+        ? entry.voiceEncryptionNonce
+        : entry.videoEncryptionNonce;
+    final mac = kind == MyWhyMediaKind.voice
+        ? entry.voiceEncryptionMac
+        : entry.videoEncryptionMac;
+    final metadata = kind == MyWhyMediaKind.voice
+        ? entry.voiceMetadata
+        : entry.videoMetadata;
+    if (nonce == null || mac == null || metadata == null) {
+      throw const MyWhyValidationException(
+        'Legacy private media is incomplete.',
+      );
+    }
+    final purpose = kind.name;
+    final legacyCipherText = await _supabase.storage
+        .from(bucket)
+        .download(path);
+    final clear = await _encryption.decryptBytes(
+      payload: MyWhyEncryptedPayload.fromBase64(
+        cipherText: base64Encode(legacyCipherText),
+        nonce: nonce,
+        mac: mac,
+        version: entry.encryptionVersion,
+      ),
+      keyBytes: legacyKey,
+      userId: entry.userId,
+      purpose: purpose,
+    );
+    final encrypted = await _encryption.encryptBytes(
+      plaintext: clear,
+      keyBytes: recoveredKey,
+      userId: entry.userId,
+      purpose: purpose,
+    );
+    final replacementPath =
+        '${entry.userId}/$purpose/${_randomObjectName()}.bin';
+    await _supabase.storage
+        .from(bucket)
+        .uploadBinary(
+          replacementPath,
+          encrypted.cipherText,
+          fileOptions: const FileOptions(
+            contentType: 'application/octet-stream',
+            cacheControl: '0',
+            upsert: false,
+          ),
+        );
+    uploadedPaths.add(replacementPath);
+    return _MigratedMyWhyMedia(
+      oldPath: path,
+      databaseValues: {
+        '${kind.name}_storage_path': replacementPath,
+        '${kind.name}_encryption_nonce': encrypted.nonceBase64,
+        '${kind.name}_encryption_mac': encrypted.macBase64,
+        '${kind.name}_metadata': metadata,
+      },
+    );
   }
 
   Future<MyWhyEntry> _upsertAndReturn(Map<String, dynamic> values) async {
@@ -380,6 +594,16 @@ class MyWhyService {
     if (user == null) throw const MyWhyAccessException();
     return user;
   }
+}
+
+class _MigratedMyWhyMedia {
+  final String oldPath;
+  final Map<String, dynamic> databaseValues;
+
+  const _MigratedMyWhyMedia({
+    required this.oldPath,
+    required this.databaseValues,
+  });
 }
 
 class MyWhyValidationException implements Exception {

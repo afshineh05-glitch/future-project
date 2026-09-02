@@ -201,7 +201,7 @@ class FutureSelfImageService {
     String? bodyTemplateId;
     if (inputMode == FutureSelfInputMode.faceOnly) {
       bodyTemplateId = _templateResolver
-          .requireAvailable(
+          .resolve(
             profileCategory: foundationData['sex']?.toString(),
             heightCm: (foundationData['height_cm'] as num?)?.toDouble(),
             weightKg: (foundationData['weight_kg'] as num?)?.toDouble(),

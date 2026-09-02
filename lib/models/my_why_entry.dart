@@ -19,6 +19,8 @@ class MyWhyEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  bool get isLegacyV1 => encryptionVersion == 1;
+
   const MyWhyEntry({
     required this.id,
     required this.userId,
@@ -71,10 +73,12 @@ class MyWhyViewState {
   final MyWhyEntry? entry;
   final String? text;
   final bool migratedLegacyText;
+  final bool hasUnrecoverableLegacy;
 
   const MyWhyViewState({
     required this.entry,
     required this.text,
     this.migratedLegacyText = false,
+    this.hasUnrecoverableLegacy = false,
   });
 }

@@ -44,3 +44,11 @@ class MyWhyKeyUnavailableException implements Exception {
   String toString() =>
       'This My Why was encrypted on another installation and cannot be opened on this device. V1 encryption is device-bound unless secure key recovery is implemented.';
 }
+
+class MyWhyLegacyUnrecoverableException extends MyWhyKeyUnavailableException {
+  const MyWhyLegacyUnrecoverableException();
+
+  @override
+  String toString() =>
+      'This legacy My Why was encrypted on another installation and cannot be recovered because its original device key is unavailable. Your encrypted record has been preserved.';
+}

@@ -86,13 +86,13 @@ export const goalInstruction = (goal: string) => {
 
 export const buildPrompt = (context: ReturnType<typeof canonicalContext>) => {
   const modeInstruction = context.mode === "face_only"
-    ? `FACE ONLY MODE: The face photo identifies the person, but it does not establish their real current body. Use the supplied predefined neutral body template as a profile-based visualization, not a reconstruction or claim about the person's actual body. Preserve the recognizable face and keep the template body realistic, neutral, non-sexual, and anatomically stable.`
+    ? `FACE ONLY MODE: The face photo is the sole authority for the person's identity and apparent gender presentation; never replace it with another person or let saved profile fields override it. The photo identifies the person but does not establish their real current body. If a predefined neutral body template is supplied, use it only for body proportions. Otherwise, create a neutral, fully clothed body visualization from the supplied profile measurements and goal without implying that it reconstructs the person's actual body. The final composition must show one complete person head-to-toe, with the entire head, both hands, both legs, and both feet visible inside the frame; do not crop at the chest, waist, knees, or ankles. Preserve the exact recognizable face, skin tone, facial hair, hairstyle, and apparent age from the face photo. Keep the body realistic, neutral, non-sexual, and anatomically stable.`
     : `FULL BODY MODE: Use the submitted full-body photo as the primary body reference. Preserve body frame, pose, camera perspective, clothing coverage, lighting, and environment where practical while making eight months of progress clearly visible.`;
   return `Create a photorealistic Future Self visualization representing approximately ${HORIZON_MONTHS} months of consistent, realistic training progress.
 
 ${modeInstruction}
 
-IDENTITY AND ANATOMY ARE CRITICAL. Preserve recognizable facial identity, facial structure, skin tone, apparent age, hairstyle, natural bone structure, shoulder alignment, torso orientation, chest symmetry, arm symmetry, leg symmetry, ribcage proportions, waist placement, and realistic muscle insertions. If a stronger transformation risks distortion, choose a smaller but stable anatomical change.
+IDENTITY AND ANATOMY ARE CRITICAL. The output must depict the same person as the input photo, not merely a similar person. Preserve recognizable facial identity, facial structure, skin tone, apparent age, gender presentation, facial hair, hairstyle, natural bone structure, shoulder alignment, torso orientation, chest symmetry, arm symmetry, leg symmetry, ribcage proportions, waist placement, and realistic muscle insertions. If a stronger transformation risks distortion, choose a smaller but stable anatomical change.
 
 The result must be noticeably different but anatomically believable: aspirational, not fantasy. ${goalInstruction(context.primaryGoal)}
 

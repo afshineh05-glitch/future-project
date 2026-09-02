@@ -70,6 +70,61 @@ void main() {
     );
   });
 
+  test('first persisted body check completes milestone from Foundation', () {
+    final state = engine.evaluate(
+      VisionProgressInput(
+        now: now,
+        foundation: const VisionFoundationBaseline(
+          exists: true,
+          completed: true,
+          primaryGoal: 'fat_loss',
+          startingWeightKg: 100,
+          targetWeightKg: 90,
+        ),
+        bodyProgressChecks: [
+          VisionBodyProgressCheck(checkedAt: now, weightKg: 97.5),
+        ],
+      ),
+    );
+    final firstCheck = state.milestones.singleWhere(
+      (item) => item.id == 'body-progress-checks-1',
+    );
+    final improvement = state.milestones.singleWhere(
+      (item) => item.id == 'meaningful-body-improvement',
+    );
+
+    expect(firstCheck.status, VisionMilestoneStatus.completed);
+    expect(firstCheck.completedAt, now);
+    expect(improvement.status, VisionMilestoneStatus.completed);
+  });
+
+  test('one real body cycle completes only the first check milestone', () {
+    final state = engine.evaluate(
+      VisionProgressInput(
+        now: now,
+        foundation: const VisionFoundationBaseline(
+          exists: true,
+          completed: true,
+          primaryGoal: 'athletic_performance',
+          startingWeightKg: 79,
+        ),
+        bodyProgressChecks: [
+          VisionBodyProgressCheck(checkedAt: now, weightKg: 78),
+        ],
+      ),
+    );
+    final first = state.milestones.singleWhere(
+      (item) => item.id == 'body-progress-checks-1',
+    );
+    final second = state.milestones.singleWhere(
+      (item) => item.id == 'body-progress-checks-2',
+    );
+
+    expect(first.status, VisionMilestoneStatus.completed);
+    expect(second.status, VisionMilestoneStatus.inProgress);
+    expect(second.currentValue, 1);
+  });
+
   test('next milestone selection is deterministic', () {
     final input = withWorkouts(6);
     final first = engine.evaluate(input).nextMilestone;

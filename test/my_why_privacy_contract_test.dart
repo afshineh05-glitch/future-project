@@ -51,4 +51,55 @@ void main() {
     expect(coachSources, isNot(contains('my_why_entries')));
     expect(coachSources, isNot(contains('encrypted_text_payload')));
   });
+
+  test(
+    'V2 keeps raw recovery keys out of Postgres and allows only own envelopes',
+    () {
+      final sql = File(
+        'supabase/migrations/202609010001_add_my_why_recovery_v2.sql',
+      ).readAsStringSync();
+
+      expect(sql, contains('my_why_key_envelopes'));
+      expect(sql, contains('wrapped_key_ciphertext'));
+      expect(sql, contains('enable row level security'));
+      expect(sql, contains('auth.uid() = user_id'));
+      expect(sql, isNot(contains('raw_encryption_key')));
+    },
+  );
+
+  test(
+    'unrecoverable V1 is archived intact before the active row becomes V2',
+    () {
+      final sql = File(
+        'supabase/migrations/202609010002_archive_unrecoverable_my_why_v1.sql',
+      ).readAsStringSync();
+
+      expect(sql, contains('my_why_legacy_archives'));
+      expect(sql, contains('source_entry_id uuid not null unique'));
+      expect(sql, contains('security definer'));
+      expect(sql, contains('auth.uid()'));
+      expect(sql, contains('legacy.encrypted_text_payload'));
+      expect(sql, contains('legacy.voice_storage_path'));
+      expect(sql, contains('legacy.video_storage_path'));
+      expect(sql, contains('encryption_version = 2'));
+      expect(sql, contains('enable row level security'));
+      expect(sql, contains('auth.uid() = user_id'));
+      expect(sql, isNot(contains('for delete to authenticated')));
+      expect(sql, isNot(contains('for update to authenticated')));
+    },
+  );
+
+  test('fresh V2 writes require the explicit unrecoverable-legacy path', () {
+    final service = File('lib/services/my_why_service.dart').readAsStringSync();
+    final widget = File('lib/widgets/my_why_section.dart').readAsStringSync();
+
+    expect(service, contains('startFreshIfLegacyUnrecoverable = false'));
+    expect(service, contains("rpc('archive_legacy_my_why_and_start_v2')"));
+    expect(service, contains('on MyWhyLegacyUnrecoverableException'));
+    expect(widget, contains('state.hasUnrecoverableLegacy'));
+    expect(
+      widget,
+      contains('startFreshIfLegacyUnrecoverable: _hasUnrecoverableLegacy'),
+    );
+  });
 }

@@ -136,7 +136,7 @@ class VisionMilestonesEngine {
           category: VisionMilestoneCategory.bodyProgress,
           title: 'Meaningful Measurement Improvement',
           description:
-              'A verified change toward your goal from repeated Body Progress checks.',
+              'A verified change toward your goal from your Foundation baseline.',
           currentValue: score,
           targetValue: 0.25,
           normalizedProgress: (score / 0.25).clamp(0.0, 1.0),

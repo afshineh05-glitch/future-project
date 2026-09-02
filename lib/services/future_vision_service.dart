@@ -1,5 +1,8 @@
+import 'package:future_project/models/body_progress.dart';
 import 'package:future_project/models/future_vision.dart';
 import 'package:future_project/models/vision_progress.dart';
+import 'package:future_project/services/body_progress_service.dart';
+import 'package:future_project/services/vision_body_progress_engine.dart';
 import 'package:future_project/services/vision_milestones_engine.dart';
 import 'package:future_project/services/vision_progress_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,14 +11,23 @@ class FutureVisionService {
   final SupabaseClient _supabase;
   final VisionProgressEngine _progressEngine;
   final VisionMilestonesEngine _milestonesEngine;
+  final BodyProgressService _bodyProgressService;
+  final VisionBodyProgressEngine _bodyProgressEngine;
 
   FutureVisionService({
     SupabaseClient? supabase,
     VisionProgressEngine progressEngine = const VisionProgressEngine(),
     VisionMilestonesEngine milestonesEngine = const VisionMilestonesEngine(),
+    BodyProgressService? bodyProgressService,
+    VisionBodyProgressEngine bodyProgressEngine =
+        const VisionBodyProgressEngine(),
   }) : _supabase = supabase ?? Supabase.instance.client,
        _progressEngine = progressEngine,
-       _milestonesEngine = milestonesEngine;
+       _milestonesEngine = milestonesEngine,
+       _bodyProgressService =
+           bodyProgressService ??
+           BodyProgressService(supabase: supabase ?? Supabase.instance.client),
+       _bodyProgressEngine = bodyProgressEngine;
 
   Future<FutureVisionState> load() async {
     final user = _requireUser();
@@ -54,6 +66,7 @@ class FutureVisionService {
           .eq('user_id', user.id)
           .order('reflection_date', ascending: false),
       _loadOptionalWorkoutHistory(user.id),
+      _loadOptionalBodyProgressHistory(),
     ]);
 
     final visionRow = results[0] as Map<String, dynamic>?;
@@ -62,6 +75,12 @@ class FutureVisionService {
     final nutritionRows = (results[3] as List).cast<Map<String, dynamic>>();
     final reflectionRows = (results[4] as List).cast<Map<String, dynamic>>();
     final workoutRows = (results[5] as List).cast<Map<String, dynamic>>();
+    final bodyProgressResult = results[6] as List<BodyProgressCheck>?;
+    final bodyProgressHistory =
+        bodyProgressResult ?? const <BodyProgressCheck>[];
+    final bodyProgressChecks = bodyProgressHistory
+        .map((item) => item.toVisionCheck())
+        .toList(growable: false);
     final vision = visionRow == null ? null : FutureVision.fromMap(visionRow);
 
     List<Map<String, dynamic>> trainingDays = const [];
@@ -110,6 +129,7 @@ class FutureVisionService {
       plan: plan,
       trainingDayCount: trainingDays.length,
       behavior: behavior,
+      bodyProgressHistory: bodyProgressHistory,
     );
     final evidence = [...evidenceCandidates]
       ..sort((a, b) => b.priority.compareTo(a.priority));
@@ -126,7 +146,7 @@ class FutureVisionService {
     });
     final progressInput = VisionProgressInput(
       foundation: _foundationBaseline(foundation),
-      bodyProgressChecks: const [],
+      bodyProgressChecks: bodyProgressChecks,
       trainingSessions: _trainingSessions(workoutRows),
       wearable: null,
       nutritionLogCount: nutritionRows.length,
@@ -135,13 +155,25 @@ class FutureVisionService {
     );
     final progress = _progressEngine.evaluate(progressInput);
     final milestones = _milestonesEngine.evaluate(progressInput);
+    final bodyProgressCycle = bodyProgressResult == null
+        ? null
+        : _bodyProgressCycle(
+            foundation: foundation,
+            history: bodyProgressHistory,
+            now: today,
+          );
 
     return FutureVisionState(
       vision: vision,
       foundationGoal: foundation?['primary_goal']?.toString() ?? '',
       stage: stage,
       evidence: evidence.take(5).toList(growable: false),
-      todayAction: _todayAction(plan, trainingDays, hasNutritionToday),
+      todayAction: _todayAction(
+        plan,
+        trainingDays,
+        hasNutritionToday,
+        bodyProgressCycle,
+      ),
       todayReflection: todayReflection,
       reflectionCount: reflections.length,
       meaningfulSignalCount: evidenceCandidates.length,
@@ -174,6 +206,16 @@ class FutureVisionService {
       return rows.cast<Map<String, dynamic>>();
     } catch (_) {
       return const <Map<String, dynamic>>[];
+    }
+  }
+
+  /// Body Progress enriches My Vision, but a pending migration or temporary
+  /// history failure must not make the rest of My Vision unavailable.
+  Future<List<BodyProgressCheck>?> _loadOptionalBodyProgressHistory() async {
+    try {
+      return await _bodyProgressService.loadHistory();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -300,6 +342,7 @@ class FutureVisionService {
     required Map<String, dynamic>? plan,
     required int trainingDayCount,
     required VisionBehaviorSummary behavior,
+    required List<BodyProgressCheck> bodyProgressHistory,
   }) {
     final evidence = <VisionEvidence>[];
     if (vision != null) {
@@ -324,6 +367,10 @@ class FutureVisionService {
         ),
       );
     }
+    final bodyProgressEvidence = _bodyProgressEngine.evidenceFor(
+      bodyProgressHistory,
+    );
+    if (bodyProgressEvidence != null) evidence.add(bodyProgressEvidence);
     if (plan != null) {
       evidence.add(
         VisionEvidence(
@@ -450,7 +497,12 @@ class FutureVisionService {
     Map<String, dynamic>? plan,
     List<Map<String, dynamic>> days,
     bool hasNutritionToday,
+    BodyProgressCycle? bodyProgressCycle,
   ) {
+    final bodyProgressAction = _bodyProgressEngine.dueActionFor(
+      bodyProgressCycle,
+    );
+    if (bodyProgressAction != null) return bodyProgressAction;
     final scheduled = _scheduledTrainingDay(plan, days);
     if (scheduled != null) {
       final title = scheduled['title']?.toString().trim();
@@ -484,6 +536,23 @@ class FutureVisionService {
       ctaLabel: null,
       destination: VisionActionDestination.none,
       isRecovery: true,
+    );
+  }
+
+  BodyProgressCycle? _bodyProgressCycle({
+    required Map<String, dynamic>? foundation,
+    required List<BodyProgressCheck> history,
+    required DateTime now,
+  }) {
+    if (foundation?['is_completed'] != true) return null;
+    final baselineAt = _parseDate(
+      foundation?['completed_at'] ?? foundation?['created_at'],
+    );
+    if (baselineAt == null) return null;
+    return BodyProgressCycle.calculate(
+      baselineAt: baselineAt.toLocal(),
+      latestCheckAt: history.firstOrNull?.checkedAt.toLocal(),
+      now: now,
     );
   }
 
@@ -540,7 +609,10 @@ class FutureVisionService {
   DateTime? _parseDate(dynamic value) =>
       value == null ? null : DateTime.tryParse(value.toString());
 
-  double? _double(dynamic value) => (value as num?)?.toDouble();
+  double? _double(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
 
   String _dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'

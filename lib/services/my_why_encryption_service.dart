@@ -34,7 +34,8 @@ class MyWhyEncryptedPayload {
 }
 
 class MyWhyEncryptionService {
-  static const currentVersion = 1;
+  static const legacyVersion = 1;
+  static const currentVersion = 2;
   final Cipher _cipher;
 
   MyWhyEncryptionService({Cipher? cipher})
@@ -44,11 +45,13 @@ class MyWhyEncryptionService {
     required String plaintext,
     required List<int> keyBytes,
     required String userId,
+    int version = currentVersion,
   }) => encryptBytes(
     plaintext: Uint8List.fromList(utf8.encode(plaintext)),
     keyBytes: keyBytes,
     userId: userId,
     purpose: 'text',
+    version: version,
   );
 
   Future<String> decryptText({
@@ -69,17 +72,19 @@ class MyWhyEncryptionService {
     required List<int> keyBytes,
     required String userId,
     required String purpose,
+    int version = currentVersion,
   }) async {
-    _validateVersion(currentVersion);
+    _validateVersion(version);
     final box = await _cipher.encrypt(
       plaintext,
       secretKey: SecretKey(keyBytes),
-      aad: _aad(userId, purpose),
+      aad: _aad(userId, purpose, version),
     );
     return MyWhyEncryptedPayload(
       cipherText: Uint8List.fromList(box.cipherText),
       nonce: Uint8List.fromList(box.nonce),
       mac: Uint8List.fromList(box.mac.bytes),
+      version: version,
     );
   }
 
@@ -98,7 +103,7 @@ class MyWhyEncryptionService {
           mac: Mac(payload.mac),
         ),
         secretKey: SecretKey(keyBytes),
-        aad: _aad(userId, purpose),
+        aad: _aad(userId, purpose, payload.version),
       );
       return Uint8List.fromList(clear);
     } on SecretBoxAuthenticationError {
@@ -108,11 +113,11 @@ class MyWhyEncryptionService {
     }
   }
 
-  List<int> _aad(String userId, String purpose) =>
-      utf8.encode('my-why:v$currentVersion:$userId:$purpose');
+  List<int> _aad(String userId, String purpose, int version) =>
+      utf8.encode('my-why:v$version:$userId:$purpose');
 
   void _validateVersion(int version) {
-    if (version != currentVersion) {
+    if (version != legacyVersion && version != currentVersion) {
       throw MyWhyDecryptionException(
         'Unsupported My Why encryption version: $version.',
       );

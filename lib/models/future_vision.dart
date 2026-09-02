@@ -113,6 +113,7 @@ class VisionReflection {
 enum VisionEvidenceType {
   visionStarted,
   foundationCompleted,
+  bodyProgress,
   trainingPlanCreated,
   workoutCompleted,
   trainingConsistency,
@@ -139,7 +140,7 @@ class VisionEvidence {
   });
 }
 
-enum VisionActionDestination { trainingPlan, nutrition, none }
+enum VisionActionDestination { trainingPlan, nutrition, bodyProgress, none }
 
 class VisionTodayAction {
   final String action;

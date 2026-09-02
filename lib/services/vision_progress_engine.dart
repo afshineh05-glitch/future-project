@@ -125,11 +125,13 @@ class VisionProgressEngine {
   }
 
   double? _bodyScore(VisionProgressInput input) {
-    if (input.bodyProgressChecks.length < 2) return null;
+    if (input.bodyProgressChecks.isEmpty || !input.foundation.exists) {
+      return null;
+    }
     final checks = [...input.bodyProgressChecks]
       ..sort((a, b) => a.checkedAt.compareTo(b.checkedAt));
     final baselineWeight =
-        input.foundation.startingWeightKg ?? checks.first.weightKg;
+        input.foundation.startingWeightKg;
     final targetWeight = input.foundation.targetWeightKg;
     final latestWeight = checks.last.weightKg;
     if (baselineWeight != null &&
@@ -143,8 +145,7 @@ class VisionProgressEngine {
     final goal = _normalize(input.foundation.primaryGoal);
     if ({'fat_loss', 'lose_fat'}.contains(goal)) {
       final baselineWaist =
-          input.foundation.measurementsCm['waist'] ??
-          checks.first.measurementsCm['waist'];
+          input.foundation.measurementsCm['waist'];
       final latestWaist = checks.last.measurementsCm['waist'];
       if (baselineWaist != null && latestWaist != null && baselineWaist > 0) {
         return _clamp((baselineWaist - latestWaist) / (baselineWaist * 0.10));
@@ -155,8 +156,7 @@ class VisionProgressEngine {
       final changes = <double>[];
       for (final key in muscleMeasurements) {
         final baseline =
-            input.foundation.measurementsCm[key] ??
-            checks.first.measurementsCm[key];
+            input.foundation.measurementsCm[key];
         final latest = checks.last.measurementsCm[key];
         if (baseline != null && latest != null && baseline > 0) {
           changes.add((latest - baseline) / (baseline * 0.08));

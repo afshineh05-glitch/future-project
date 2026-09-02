@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:future_project/models/my_why_entry.dart';
 import 'package:future_project/services/my_why_encryption_service.dart';
 import 'package:future_project/services/my_why_key_store.dart';
+import 'package:future_project/services/my_why_recovery_key_service.dart';
 import 'package:future_project/services/my_why_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:image_picker/image_picker.dart';
@@ -33,21 +34,34 @@ class _MyWhySectionState extends State<MyWhySection> {
   String? _recordingPath;
   DateTime? _recordingStartedAt;
   Timer? _recordingTimer;
+  StreamSubscription<String>? _audioLogSubscription;
   Duration _recordingDuration = Duration.zero;
   bool _loading = true;
   bool _busy = false;
   bool _recording = false;
+  bool _hasUnrecoverableLegacy = false;
 
   @override
   void initState() {
     super.initState();
     _load();
     _audioPlayer.onPlayerComplete.listen((_) => _service.clearPlaybackFiles());
+    _audioLogSubscription = _audioPlayer.onLog.listen(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('My Why voice playback error: $error');
+        if (!mounted) return;
+        const message = 'Voice playback failed. Please try again.';
+        setState(() => _error = message);
+        _message(message);
+      },
+    );
   }
 
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    unawaited(_audioLogSubscription?.cancel());
     unawaited(_disposePrivateResources());
     super.dispose();
   }
@@ -81,7 +95,10 @@ class _MyWhySectionState extends State<MyWhySection> {
       setState(() {
         _entry = state.entry;
         _text = state.text;
-        _error = null;
+        _hasUnrecoverableLegacy = state.hasUnrecoverableLegacy;
+        _error = state.hasUnrecoverableLegacy
+            ? const MyWhyLegacyUnrecoverableException().toString()
+            : null;
         _loading = false;
       });
     } catch (error) {
@@ -127,8 +144,12 @@ class _MyWhySectionState extends State<MyWhySection> {
     controller.dispose();
     if (value == null) return;
     await _run(() async {
-      _entry = await _service.saveText(value);
+      _entry = await _service.saveText(
+        value,
+        startFreshIfLegacyUnrecoverable: _hasUnrecoverableLegacy,
+      );
       _text = value.trim().isEmpty ? null : value.trim();
+      _hasUnrecoverableLegacy = false;
     });
   }
 
@@ -149,8 +170,9 @@ class _MyWhySectionState extends State<MyWhySection> {
       return;
     }
     final directory = await getTemporaryDirectory();
+    final extension = Platform.isWindows ? 'aac' : 'm4a';
     final path =
-        '${directory.path}${Platform.pathSeparator}my_why_capture_${DateTime.now().microsecondsSinceEpoch}.m4a';
+        '${directory.path}${Platform.pathSeparator}my_why_capture_${DateTime.now().microsecondsSinceEpoch}.$extension';
     await _recorder.start(
       const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
       path: path,
@@ -193,9 +215,11 @@ class _MyWhySectionState extends State<MyWhySection> {
           kind: MyWhyMediaKind.voice,
           clearBytes: bytes,
           duration: duration,
-          playbackExtension: 'm4a',
-          playbackMimeType: 'audio/mp4',
+          playbackExtension: Platform.isWindows ? 'aac' : 'm4a',
+          playbackMimeType: Platform.isWindows ? 'audio/aac' : 'audio/mp4',
+          startFreshIfLegacyUnrecoverable: _hasUnrecoverableLegacy,
         );
+        _hasUnrecoverableLegacy = false;
       });
     } finally {
       if (await file.exists()) await file.delete();
@@ -205,6 +229,15 @@ class _MyWhySectionState extends State<MyWhySection> {
   }
 
   Future<void> _recordVideo() async {
+    if (!_picker.supportsImageSource(ImageSource.camera)) {
+      if (mounted) {
+        setState(() => _error = null);
+        _message(
+          'Video recording is not supported by the current Windows camera picker.',
+        );
+      }
+      return;
+    }
     final picked = await _picker.pickVideo(
       source: ImageSource.camera,
       maxDuration: MyWhyService.maxVideoDuration,
@@ -231,7 +264,9 @@ class _MyWhySectionState extends State<MyWhySection> {
           duration: controller!.value.duration,
           playbackExtension: extension,
           playbackMimeType: 'video/mp4',
+          startFreshIfLegacyUnrecoverable: _hasUnrecoverableLegacy,
         );
+        _hasUnrecoverableLegacy = false;
       });
     } finally {
       await controller?.dispose();
@@ -249,7 +284,10 @@ class _MyWhySectionState extends State<MyWhySection> {
         entry,
         MyWhyMediaKind.voice,
       );
-      await _audioPlayer.play(DeviceFileSource(path));
+      final source = Platform.isWindows
+          ? UrlSource(Uri.file(path).toString(), mimeType: 'audio/aac')
+          : DeviceFileSource(path, mimeType: 'audio/mp4');
+      await _audioPlayer.play(source);
     });
   }
 
@@ -331,6 +369,7 @@ class _MyWhySectionState extends State<MyWhySection> {
     });
     try {
       await action();
+      if (mounted) setState(() => _error = null);
     } catch (error) {
       if (mounted) {
         final message = _userMessage(error);
@@ -345,6 +384,7 @@ class _MyWhySectionState extends State<MyWhySection> {
   Future<void> _guard(Future<void> Function() action) async {
     try {
       await action();
+      if (mounted) setState(() => _error = null);
     } catch (error) {
       if (!mounted) return;
       final message = _userMessage(error);
@@ -362,6 +402,7 @@ class _MyWhySectionState extends State<MyWhySection> {
         error is MyWhyPartialFailureException ||
         error is MyWhyAccessException ||
         error is MyWhyKeyUnavailableException ||
+        error is MyWhyRecoveryException ||
         error is MyWhyDecryptionException) {
       return error.toString();
     }
@@ -497,7 +538,7 @@ class _MyWhySectionState extends State<MyWhySection> {
         ],
         const SizedBox(height: 8),
         const Text(
-          'V1 encryption is device-bound unless secure key recovery is implemented. Reinstalling the app or using another device may make existing My Why content unavailable.',
+          'New My Why content is encrypted with account recovery. Legacy V1 content can be migrated only from the original installation.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
         ),
       ],

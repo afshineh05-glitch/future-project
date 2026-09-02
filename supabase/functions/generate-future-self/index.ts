@@ -191,20 +191,20 @@ Deno.serve(async (req) => {
         return json({ error: "The body template reference is out of date." }, 409);
       }
       const templatePath = templateAssetReference(templateId);
-      if (!templatePath) {
-        return json({
-          code: "body_template_unavailable",
-          error: "A body template for Face Only mode is not available yet.",
-        }, 409);
+      if (templatePath) {
+        const { data: template, error: templateError } = await admin.storage
+          .from("future-self-images")
+          .download(templatePath);
+        if (templateError || !template) {
+          console.warn("Future Self body template could not be loaded; using profile fallback", {
+            templateId,
+            templatePath,
+          });
+        } else {
+          sourceImages.push({ blob: template, name: "neutral-body-template.png" });
+        }
       }
-      const { data: template, error: templateError } = await admin.storage
-        .from("future-self-images")
-        .download(templatePath);
-      if (templateError || !template) {
-        return json({ code: "body_template_unavailable", error: "Body template unavailable." }, 409);
-      }
-      sourceImages.push({ blob: template, name: "neutral-body-template.png" });
-      sourceReference = templateId;
+      sourceReference = templatePath ? templateId : `profile:${templateId}`;
     }
 
     const form = new FormData();

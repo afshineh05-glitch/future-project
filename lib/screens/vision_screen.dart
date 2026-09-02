@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/future_vision.dart';
 import 'package:future_project/models/future_body_template.dart';
 import 'package:future_project/models/future_self_generation.dart';
+import 'package:future_project/screens/body_progress_screen.dart';
 import 'package:future_project/screens/vision_milestones_screen.dart';
 import 'package:future_project/screens/nutrition_home_screen.dart';
 import 'package:future_project/screens/training_plan_screen.dart';
@@ -120,14 +121,16 @@ class _VisionScreenState extends State<VisionScreen> {
   void _message(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
-  void _openTodayAction(VisionActionDestination destination) {
+  Future<void> _openTodayAction(VisionActionDestination destination) async {
     final Widget? screen = switch (destination) {
       VisionActionDestination.trainingPlan => const TrainingPlanScreen(),
       VisionActionDestination.nutrition => const NutritionHomeScreen(),
+      VisionActionDestination.bodyProgress => const BodyProgressScreen(),
       VisionActionDestination.none => null,
     };
     if (screen == null) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    if (mounted) await _load();
   }
 
   @override
@@ -906,6 +909,7 @@ class _VisionScreenState extends State<VisionScreen> {
   IconData _evidenceIcon(VisionEvidenceType type) => switch (type) {
     VisionEvidenceType.visionStarted => Icons.explore_outlined,
     VisionEvidenceType.foundationCompleted => Icons.flag_outlined,
+    VisionEvidenceType.bodyProgress => Icons.straighten_rounded,
     VisionEvidenceType.trainingPlanCreated => Icons.fitness_center_outlined,
     VisionEvidenceType.workoutCompleted => Icons.task_alt_rounded,
     VisionEvidenceType.trainingConsistency =>

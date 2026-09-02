@@ -116,6 +116,84 @@ void main() {
     expect(result.overallProgress, closeTo(expected, 0.000001));
   });
 
+  test('first Body Progress Check compares with Foundation baseline', () {
+    final result = engine.evaluate(
+      VisionProgressInput(
+        now: now,
+        foundation: const VisionFoundationBaseline(
+          exists: true,
+          completed: true,
+          primaryGoal: 'fat_loss',
+          startingWeightKg: 100,
+          targetWeightKg: 90,
+          measurementsCm: {'waist': 100},
+        ),
+        bodyProgressChecks: [
+          VisionBodyProgressCheck(
+            checkedAt: now,
+            weightKg: 97.5,
+            measurementsCm: const {'waist': 96},
+          ),
+        ],
+      ),
+    );
+    final body = result.signals.singleWhere(
+      (item) => item.type == VisionProgressSignalType.bodyProgress,
+    );
+
+    expect(body.available, isTrue);
+    expect(body.evidenceCount, 1);
+    expect(body.value, closeTo(0.25, 0.000001));
+  });
+
+  test('one athletic-performance check keeps percentage hidden at zero', () {
+    final result = engine.evaluate(
+      VisionProgressInput(
+        now: now,
+        foundation: const VisionFoundationBaseline(
+          exists: true,
+          completed: true,
+          primaryGoal: 'athletic_performance',
+          startingWeightKg: 79,
+          measurementsCm: {
+            'waist': 89,
+            'chest': 111,
+            'hips': 100,
+            'arm': 38,
+            'thigh': 60,
+            'neck': 40,
+          },
+        ),
+        bodyProgressChecks: [
+          VisionBodyProgressCheck(
+            checkedAt: now,
+            weightKg: 78,
+            measurementsCm: const {
+              'waist': 88,
+              'chest': 110,
+              'hips': 100,
+              'arm': 39,
+              'thigh': 60,
+              'neck': 40,
+            },
+          ),
+        ],
+        nutritionLogCount: 3,
+        nutritionActiveDates: [now, now.subtract(const Duration(days: 1))],
+      ),
+    );
+    final body = result.signals.singleWhere(
+      (item) => item.type == VisionProgressSignalType.bodyProgress,
+    );
+
+    expect(body.available, isFalse);
+    expect(body.value, 0);
+    expect(body.effectiveWeight, 0);
+    expect(result.overallProgress, 0);
+    expect(result.confidence, 0.25);
+    expect(result.canShowPercentage, isFalse);
+  });
+
   test('absent wearable has zero effective weight, not zero progress', () {
     final result = engine.evaluate(
       VisionProgressInput(
