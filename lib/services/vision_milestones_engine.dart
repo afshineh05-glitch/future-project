@@ -66,6 +66,36 @@ class VisionMilestonesEngine {
     );
   }
 
+  /// Personalizes presentation around canonical milestone results without
+  /// changing completion, progress, or locking rules.
+  VisionMilestonesState personalize(
+    VisionMilestonesState canonical,
+    VisionMilestonePersonalizationContext context,
+  ) {
+    final personalized = canonical.milestones
+        .map((item) => _personalizedCopy(item, context))
+        .toList(growable: false);
+    final candidates =
+        personalized
+            .where((item) => item.status == VisionMilestoneStatus.inProgress)
+            .toList()
+          ..sort((a, b) {
+            final score = _personalizedScore(
+              b,
+              context,
+            ).compareTo(_personalizedScore(a, context));
+            if (score != 0) return score;
+            return a.id.compareTo(b.id);
+          });
+    final next = candidates.firstOrNull;
+    final visible = _visibleJourney(personalized, candidates, next);
+    return VisionMilestonesState(
+      milestones: canonical.milestones,
+      visibleMilestones: List.unmodifiable(visible),
+      nextMilestone: next,
+    );
+  }
+
   List<VisionMilestone> _thresholdMilestones({
     required VisionMilestoneCategory category,
     required VisionMilestoneSource source,
@@ -128,12 +158,12 @@ class VisionMilestonesEngine {
       completedDates: checks.map((item) => item.checkedAt).toList(),
       priority: 110,
     );
-    if (bodySignal != null) {
+    if (bodySignal != null && bodySignal.normalizedValue > 0) {
       final score = bodySignal.normalizedValue;
       items.add(
         VisionMilestone(
           id: 'meaningful-body-improvement',
-          category: VisionMilestoneCategory.bodyProgress,
+          category: VisionMilestoneCategory.bodyTransformation,
           title: 'Meaningful Measurement Improvement',
           description:
               'A verified change toward your goal from your Foundation baseline.',
@@ -180,6 +210,152 @@ class VisionMilestonesEngine {
         milestone.normalizedProgress * 25 +
         dataStrength -
         remainingRatio * 5;
+  }
+
+  VisionMilestone _personalizedCopy(
+    VisionMilestone milestone,
+    VisionMilestonePersonalizationContext context,
+  ) {
+    if (milestone.status == VisionMilestoneStatus.completed) {
+      return milestone.copyWith(
+        description: 'Completed from your verified activity history.',
+      );
+    }
+    if (milestone.id == 'body-progress-checks-2' &&
+        milestone.currentValue == 1) {
+      return milestone.copyWith(
+        title: 'Complete your next Body Progress Check',
+        description:
+            'Your second check will create your first comparison between recorded check periods.',
+      );
+    }
+    if (milestone.id.startsWith('workouts-')) {
+      final remaining = (milestone.targetValue - milestone.currentValue).ceil();
+      return milestone.copyWith(
+        title: remaining == 1
+            ? 'Complete your next workout'
+            : 'Build toward ${milestone.targetValue.round()} completed workouts',
+        description: context.returnedAfterGap
+            ? 'You have already returned. Another completed session will rebuild your recorded training pattern.'
+            : '$remaining verified ${remaining == 1 ? 'session remains' : 'sessions remain'} to reach this training milestone.',
+      );
+    }
+    if (milestone.id.startsWith('active-training-days-')) {
+      final remaining = (milestone.targetValue - milestone.currentValue).ceil();
+      return milestone.copyWith(
+        title: 'Train on ${milestone.targetValue.round()} different days',
+        description:
+            '$remaining more verified training ${remaining == 1 ? 'day will' : 'days will'} strengthen your consistency signal.',
+      );
+    }
+    if (milestone.id.startsWith('nutrition-days-')) {
+      final remaining = (milestone.targetValue - milestone.currentValue).ceil();
+      return milestone.copyWith(
+        title: 'Record ${milestone.targetValue.round()} nutrition days',
+        description:
+            '$remaining more recorded ${remaining == 1 ? 'day will' : 'days will'} strengthen the nutrition evidence behind your goal.',
+      );
+    }
+    if (milestone.id == 'meaningful-body-improvement') {
+      return milestone.copyWith(
+        title: 'Continue verified body change',
+        description:
+            'Your recorded measurements already show movement toward your goal.',
+      );
+    }
+    return milestone;
+  }
+
+  List<VisionMilestone> _visibleJourney(
+    List<VisionMilestone> all,
+    List<VisionMilestone> rankedCandidates,
+    VisionMilestone? next,
+  ) {
+    final visibleIds = <String>{};
+    final visible = <VisionMilestone>[];
+    void add(VisionMilestone item) {
+      if (visibleIds.add(item.id)) visible.add(item);
+    }
+
+    // Preserve every completed achievement in the user-facing history.
+    for (final item in all.where(
+      (item) => item.status == VisionMilestoneStatus.completed,
+    )) {
+      add(item);
+    }
+    if (next != null) add(next);
+
+    // Show the strongest current item from other supported categories.
+    final represented = <VisionMilestoneCategory>{};
+    if (next != null) represented.add(next.category);
+    for (final item in rankedCandidates) {
+      if (represented.add(item.category)) add(item);
+    }
+
+    // Retain only the immediate locked step after a visible current item.
+    for (final category in VisionMilestoneCategory.values) {
+      final categoryItems = all
+          .where((item) => item.category == category)
+          .toList();
+      final currentIndex = categoryItems.indexWhere(
+        (item) => item.status == VisionMilestoneStatus.inProgress,
+      );
+      if (currentIndex >= 0 && currentIndex + 1 < categoryItems.length) {
+        add(categoryItems[currentIndex + 1]);
+      }
+    }
+    return visible;
+  }
+
+  double _personalizedScore(
+    VisionMilestone milestone,
+    VisionMilestonePersonalizationContext context,
+  ) {
+    final goal = context.primaryGoal.toLowerCase().trim().replaceAll(
+      RegExp(r'[\s-]+'),
+      '_',
+    );
+    final relevance = switch (goal) {
+      'fat_loss' || 'lose_fat' => switch (milestone.category) {
+        VisionMilestoneCategory.bodyTransformation => 42,
+        VisionMilestoneCategory.bodyProgress => 30,
+        VisionMilestoneCategory.nutrition => 24,
+        VisionMilestoneCategory.consistency => 12,
+        VisionMilestoneCategory.training => 8,
+        VisionMilestoneCategory.strength => 0,
+      },
+      'build_muscle' ||
+      'muscle_gain' ||
+      'become_stronger' => switch (milestone.category) {
+        VisionMilestoneCategory.strength => 45,
+        VisionMilestoneCategory.training => 34,
+        VisionMilestoneCategory.bodyTransformation => 28,
+        VisionMilestoneCategory.consistency => 22,
+        VisionMilestoneCategory.bodyProgress => 18,
+        VisionMilestoneCategory.nutrition => 8,
+      },
+      _ => switch (milestone.category) {
+        VisionMilestoneCategory.consistency => 34,
+        VisionMilestoneCategory.training => 30,
+        VisionMilestoneCategory.bodyProgress => 18,
+        VisionMilestoneCategory.nutrition => 14,
+        VisionMilestoneCategory.bodyTransformation => 12,
+        VisionMilestoneCategory.strength => 10,
+      },
+    };
+    final proximity = milestone.normalizedProgress * 45;
+    final recent = switch (milestone.category) {
+      VisionMilestoneCategory.training ||
+      VisionMilestoneCategory.consistency => context.hasRecentTraining ? 12 : 0,
+      VisionMilestoneCategory.nutrition => context.hasRecentNutrition ? 10 : 0,
+      _ => 0,
+    };
+    final returning =
+        context.returnedAfterGap &&
+            milestone.category == VisionMilestoneCategory.training
+        ? 38
+        : 0;
+    return relevance + proximity + recent + returning + milestone.priority / 20;
   }
 
   List<DateTime> _distinctDates(Iterable<DateTime> dates) {

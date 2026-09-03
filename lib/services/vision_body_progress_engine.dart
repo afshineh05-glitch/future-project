@@ -18,7 +18,7 @@ class VisionBodyProgressEngine {
           : 'You kept measuring your body progress',
       detail: checkCount == 1
           ? 'Your first check now updates your Vision progress and milestones.'
-          : '$checkCount Body Progress checks are showing how your body is changing over time.',
+          : '$checkCount Body Progress checks now provide stronger comparison points over time.',
       priority: checkCount == 1 ? 85 : 95,
       occurredAt: latest.checkedAt,
     );

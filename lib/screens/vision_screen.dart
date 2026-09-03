@@ -315,9 +315,9 @@ class _VisionScreenState extends State<VisionScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
-          'This is who I\'m becoming.',
-          style: TextStyle(
+        Text(
+          _state!.intelligence.heroInsight,
+          style: const TextStyle(
             color: Color(0xFFD8F2E8),
             fontSize: 18,
             fontWeight: FontWeight.w500,
@@ -439,6 +439,15 @@ class _VisionScreenState extends State<VisionScreen> {
           '${_milestoneValue(milestone.currentValue)} / ${_milestoneValue(milestone.targetValue)}',
           style: const TextStyle(color: Color(0xFFD8F2E8), fontSize: 13),
         ),
+        const SizedBox(height: 7),
+        Text(
+          _state!.intelligence.milestoneExplanation,
+          style: const TextStyle(
+            color: Color(0xFFD8F2E8),
+            fontSize: 12,
+            height: 1.35,
+          ),
+        ),
         const SizedBox(height: 9),
         LinearProgressIndicator(
           value: milestone.normalizedProgress,
@@ -489,15 +498,15 @@ class _VisionScreenState extends State<VisionScreen> {
                 ),
               ),
               const SizedBox(width: 18),
-              const Expanded(
+              Expanded(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Trust the future you chose.',
-                        style: TextStyle(
+                        _state!.intelligence.beliefStatement,
+                        style: const TextStyle(
                           fontSize: 27,
                           height: 1.25,
                           fontWeight: FontWeight.w800,
@@ -505,10 +514,10 @@ class _VisionScreenState extends State<VisionScreen> {
                           letterSpacing: -.3,
                         ),
                       ),
-                      SizedBox(height: 10),
+                      const SizedBox(height: 10),
                       Text(
-                        'Every action is a vote for the person you\'re becoming.',
-                        style: TextStyle(
+                        _state!.intelligence.beliefSupport,
+                        style: const TextStyle(
                           fontSize: 16,
                           height: 1.5,
                           fontWeight: FontWeight.w500,
@@ -542,9 +551,9 @@ class _VisionScreenState extends State<VisionScreen> {
       children: [
         _sectionHeader('YOUR JOURNEY'),
         const SizedBox(height: 8),
-        const Text(
-          'You\'re building evidence that this is becoming who you are.',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+        Text(
+          _state!.intelligence.journeyInsight,
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
         ),
         const SizedBox(height: 18),
         Text(
@@ -829,10 +838,10 @@ class _VisionScreenState extends State<VisionScreen> {
               )
               .toList(),
         ),
-        if (selected != null) ...[
+        if (_state!.intelligence.reflectionInsight.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
-            _reflectionResponse(selected),
+            _state!.intelligence.reflectionInsight,
             style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ],
@@ -919,14 +928,8 @@ class _VisionScreenState extends State<VisionScreen> {
     VisionEvidenceType.reflectionStarted ||
     VisionEvidenceType.reflectionConsistency => Icons.self_improvement_rounded,
     VisionEvidenceType.returnedAfterGap => Icons.replay_rounded,
-  };
-
-  String _reflectionResponse(String response) => switch (response) {
-    'yes' => 'Keep building on it.',
-    'a_little' => 'Small steps still count.',
-    'not_today' =>
-      'That\'s useful to know. One day doesn\'t change your direction.',
-    _ => '',
+    VisionEvidenceType.milestoneCompleted => Icons.emoji_events_outlined,
+    VisionEvidenceType.futureSelfGenerated => Icons.auto_awesome_outlined,
   };
 
   String _visionDestination(FutureVision vision, {String separator = ' and '}) {

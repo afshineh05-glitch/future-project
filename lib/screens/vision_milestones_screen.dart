@@ -48,6 +48,7 @@ class VisionMilestonesScreen extends StatelessWidget {
   }
 
   String _categoryLabel(VisionMilestoneCategory category) => switch (category) {
+    VisionMilestoneCategory.bodyTransformation => 'BODY TRANSFORMATION',
     VisionMilestoneCategory.training => 'TRAINING',
     VisionMilestoneCategory.consistency => 'CONSISTENCY',
     VisionMilestoneCategory.bodyProgress => 'BODY PROGRESS',

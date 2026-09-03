@@ -1,6 +1,7 @@
 import 'package:future_project/models/vision_milestones.dart';
 import 'package:future_project/models/vision_progress.dart';
 import 'package:future_project/models/future_self_generation.dart';
+import 'package:future_project/models/vision_intelligence.dart';
 
 class FutureVision {
   final String userId;
@@ -122,6 +123,8 @@ enum VisionEvidenceType {
   reflectionStarted,
   reflectionConsistency,
   returnedAfterGap,
+  milestoneCompleted,
+  futureSelfGenerated,
 }
 
 class VisionEvidence {
@@ -209,6 +212,7 @@ class FutureVisionState {
   final VisionBehaviorSummary behaviorSummary;
   final VisionProgress progress;
   final VisionMilestonesState milestones;
+  final VisionIntelligence intelligence;
 
   const FutureVisionState({
     required this.vision,
@@ -223,6 +227,7 @@ class FutureVisionState {
     required this.behaviorSummary,
     required this.progress,
     required this.milestones,
+    required this.intelligence,
   });
 }
 

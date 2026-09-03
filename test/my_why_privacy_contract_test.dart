@@ -42,14 +42,22 @@ void main() {
     expect(clearIndex, greaterThan(saveIndex));
   });
 
-  test('My Why is not wired into coach services or prompts', () {
-    final coachSources = [
-      File('lib/services/adaptive_training_service.dart').readAsStringSync(),
-      File('lib/services/future_vision_service.dart').readAsStringSync(),
-    ].join('\n').toLowerCase();
+  test('My Why content is not wired into coach or Vision intelligence', () {
+    final coachSources = File(
+      'lib/services/adaptive_training_service.dart',
+    ).readAsStringSync().toLowerCase();
+    final visionSource = File(
+      'lib/services/future_vision_service.dart',
+    ).readAsStringSync().toLowerCase();
+    final intelligenceSource = File(
+      'lib/services/vision_intelligence_engine.dart',
+    ).readAsStringSync().toLowerCase();
 
     expect(coachSources, isNot(contains('my_why_entries')));
-    expect(coachSources, isNot(contains('encrypted_text_payload')));
+    expect(visionSource, contains("select('has_text, has_voice, has_video')"));
+    expect(visionSource, isNot(contains('encrypted_text_payload')));
+    expect(intelligenceSource, isNot(contains('mywhyservice')));
+    expect(intelligenceSource, isNot(contains('decrypt')));
   });
 
   test(

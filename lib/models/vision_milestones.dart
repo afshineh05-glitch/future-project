@@ -1,4 +1,5 @@
 enum VisionMilestoneCategory {
+  bodyTransformation,
   training,
   consistency,
   bodyProgress,
@@ -42,17 +43,54 @@ class VisionMilestone {
     required this.priority,
     required this.source,
   });
+
+  VisionMilestone copyWith({
+    String? title,
+    String? description,
+    int? priority,
+  }) => VisionMilestone(
+    id: id,
+    category: category,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    currentValue: currentValue,
+    targetValue: targetValue,
+    normalizedProgress: normalizedProgress,
+    status: status,
+    completedAt: completedAt,
+    priority: priority ?? this.priority,
+    source: source,
+  );
 }
 
 class VisionMilestonesState {
+  /// Complete canonical tracking history, including future thresholds.
   final List<VisionMilestone> milestones;
+
+  /// Curated, personalized milestones intended for the categorized UI.
+  final List<VisionMilestone> visibleMilestones;
   final VisionMilestone? nextMilestone;
 
   const VisionMilestonesState({
     required this.milestones,
+    List<VisionMilestone>? visibleMilestones,
     required this.nextMilestone,
-  });
+  }) : visibleMilestones = visibleMilestones ?? milestones;
 
   List<VisionMilestone> forCategory(VisionMilestoneCategory category) =>
-      milestones.where((item) => item.category == category).toList();
+      visibleMilestones.where((item) => item.category == category).toList();
+}
+
+class VisionMilestonePersonalizationContext {
+  final String primaryGoal;
+  final bool returnedAfterGap;
+  final bool hasRecentTraining;
+  final bool hasRecentNutrition;
+
+  const VisionMilestonePersonalizationContext({
+    required this.primaryGoal,
+    this.returnedAfterGap = false,
+    this.hasRecentTraining = false,
+    this.hasRecentNutrition = false,
+  });
 }
