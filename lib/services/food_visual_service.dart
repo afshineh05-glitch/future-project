@@ -39,7 +39,36 @@ class FoodVisualService {
     return visual;
   }
 
-  Future<FoodVisual> _resolveFoodImage(String displayName) async {
+  Future<FoodVisual> resolveIngredientImage({
+    required String ingredientKey,
+    required String displayName,
+  }) async {
+    final key = ingredientKey.trim().toLowerCase();
+    final name = displayName.trim();
+    if (key.isEmpty || name.isEmpty) {
+      return FoodVisual.unavailable(
+        displayName: name,
+        errorCode: 'invalid_ingredient',
+        message: 'A valid ingredient is required.',
+      );
+    }
+    final requestKey = 'ingredient:$key';
+    final resolved = _resolvedVisuals[requestKey];
+    if (resolved != null) return resolved;
+    final pending = _pendingResolutions[requestKey];
+    if (pending != null) return pending;
+    final resolution = _resolveFoodImage(name, ingredientKey: key);
+    _pendingResolutions[requestKey] = resolution;
+    final visual = await resolution;
+    _pendingResolutions.remove(requestKey);
+    _resolvedVisuals[requestKey] = visual;
+    return visual;
+  }
+
+  Future<FoodVisual> _resolveFoodImage(
+    String displayName, {
+    String? ingredientKey,
+  }) async {
     if (_supabase.auth.currentUser == null) {
       return FoodVisual.unavailable(
         displayName: displayName,
@@ -51,7 +80,10 @@ class FoodVisualService {
     try {
       final response = await _supabase.functions.invoke(
         'resolve-food-image',
-        body: <String, dynamic>{'food_name': displayName},
+        body: <String, dynamic>{
+          'food_name': displayName,
+          'ingredient_key': ?ingredientKey,
+        },
       );
       final data = response.data;
       if (data is Map) {

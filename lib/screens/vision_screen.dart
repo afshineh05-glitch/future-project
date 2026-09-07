@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/future_vision.dart';
 import 'package:future_project/models/future_body_template.dart';
 import 'package:future_project/models/future_self_generation.dart';
+import 'package:future_project/models/vision_milestones.dart';
+import 'package:future_project/models/vision_progress.dart';
 import 'package:future_project/screens/body_progress_screen.dart';
 import 'package:future_project/screens/vision_milestones_screen.dart';
 import 'package:future_project/screens/nutrition_home_screen.dart';
@@ -13,6 +15,7 @@ import 'package:future_project/services/future_vision_service.dart';
 import 'package:future_project/services/future_self_image_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/my_why_section.dart';
+import 'package:future_project/widgets/vision_milestone_progress.dart';
 
 class VisionScreen extends StatefulWidget {
   const VisionScreen({super.key});
@@ -270,90 +273,295 @@ class _VisionScreenState extends State<VisionScreen> {
   );
 
   Widget _buildHero(FutureVision vision) => Container(
-    padding: const EdgeInsets.fromLTRB(26, 24, 26, 26),
+    clipBehavior: Clip.antiAlias,
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF0B4938), Color(0xFF24765D)],
+        colors: [Color(0xFF063D31), Color(0xFF0B5945), Color(0xFF176C52)],
+        stops: [0, .62, 1],
       ),
-      borderRadius: BorderRadius.circular(30),
+      borderRadius: BorderRadius.circular(32),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x260E5A43),
-          blurRadius: 28,
-          offset: Offset(0, 14),
+          color: Color(0x30063D31),
+          blurRadius: 32,
+          offset: Offset(0, 16),
         ),
       ],
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= 860;
+        final padding = desktop ? 30.0 : 22.0;
+        return Stack(
           children: [
-            const Expanded(child: _Eyebrow('MY VISION', light: true)),
-            IconButton(
-              tooltip: 'Edit future identity',
-              onPressed: () => setState(() => _editingIdentity = true),
-              icon: const Icon(
-                Icons.edit_outlined,
-                color: Colors.white70,
-                size: 20,
+            if (desktop)
+              const Positioned(
+                right: 0,
+                top: 0,
+                width: 390,
+                height: 285,
+                child: _HeroMountainVisual(),
+              ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(padding, 24, padding, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(child: _Eyebrow('MY VISION', light: true)),
+                      IconButton.filledTonal(
+                        tooltip: 'Edit future identity',
+                        onPressed: () =>
+                            setState(() => _editingIdentity = true),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withValues(alpha: .16),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: desktop ? 22 : 16),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: desktop ? 760 : 620),
+                    child: _buildHeroTitle(vision, desktop: desktop),
+                  ),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: desktop ? 720 : 620),
+                    child: Text(
+                      _state!.intelligence.heroInsight,
+                      style: TextStyle(
+                        color: const Color(0xFFDDF3EA),
+                        fontSize: desktop ? 17 : 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: desktop ? 28 : 22),
+                  if (desktop)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildHeroJourney()),
+                        Container(
+                          width: 1,
+                          height: 150,
+                          margin: const EdgeInsets.symmetric(horizontal: 28),
+                          color: Colors.white.withValues(alpha: .18),
+                        ),
+                        Expanded(child: _buildHeroProgress()),
+                      ],
+                    )
+                  else ...[
+                    _buildHeroJourney(),
+                    const SizedBox(height: 24),
+                    _buildHeroProgress(),
+                  ],
+                  const SizedBox(height: 22),
+                  _buildHeroMilestone(),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.only(top: 16),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: Colors.white.withValues(alpha: .18),
+                        ),
+                      ),
+                    ),
+                    child: desktop
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: _HeroContext(
+                                  icon: Icons.track_changes_rounded,
+                                  label: 'PRIMARY GOAL',
+                                  value: _aspirationLabel(vision.primaryGoal),
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: _HeroContext(
+                                  icon: Icons.calendar_month_outlined,
+                                  label: 'JOURNEY STARTED',
+                                  value: _shortDate(vision.createdAt),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Wrap(
+                            spacing: 24,
+                            runSpacing: 16,
+                            children: [
+                              SizedBox(
+                                width: 220,
+                                child: _HeroContext(
+                                  icon: Icons.track_changes_rounded,
+                                  label: 'PRIMARY GOAL',
+                                  value: _aspirationLabel(vision.primaryGoal),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 220,
+                                child: _HeroContext(
+                                  icon: Icons.calendar_month_outlined,
+                                  label: 'JOURNEY STARTED',
+                                  value: _shortDate(vision.createdAt),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 28),
-        Text(
-          _heroIdentityStatement(vision),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 38,
-            height: 1.14,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -.4,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          _state!.intelligence.heroInsight,
-          style: const TextStyle(
-            color: Color(0xFFD8F2E8),
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 30),
-        Divider(color: Colors.white.withValues(alpha: .18), height: 1),
-        const SizedBox(height: 20),
-        _buildHeroProgress(),
-        const SizedBox(height: 20),
-        Divider(color: Colors.white.withValues(alpha: .18), height: 1),
-        const SizedBox(height: 20),
-        _buildHeroMilestone(),
-        const SizedBox(height: 20),
-        Divider(color: Colors.white.withValues(alpha: .18), height: 1),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: _HeroContext(
-                label: 'PRIMARY GOAL',
-                value: _aspirationLabel(vision.primaryGoal),
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: _HeroContext(
-                label: 'JOURNEY STARTED',
-                value: _shortDate(vision.createdAt),
-              ),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     ),
   );
+
+  Widget _buildHeroTitle(FutureVision vision, {required bool desktop}) {
+    final statement = _heroIdentityStatement(vision);
+    final separator = statement.lastIndexOf('. ', statement.length - 2);
+    final leading = separator > 0 ? statement.substring(0, separator + 1) : '';
+    final accent = separator > 0
+        ? statement.substring(separator + 2)
+        : statement;
+    final style = TextStyle(
+      fontSize: desktop ? 39 : 30,
+      height: 1.1,
+      fontWeight: FontWeight.w900,
+      letterSpacing: -.6,
+    );
+    return Text.rich(
+      TextSpan(
+        children: [
+          if (leading.isNotEmpty)
+            TextSpan(
+              text: '$leading ',
+              style: style.copyWith(color: Colors.white),
+            ),
+          TextSpan(
+            text: accent,
+            style: style.copyWith(color: const Color(0xFF63E6A7)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroJourney() {
+    final stage = switch (_state!.stage) {
+      VisionJourneyStage.starting => 0,
+      VisionJourneyStage.building => 1,
+      VisionJourneyStage.becoming || VisionJourneyStage.livingIt => 2,
+    };
+    const labels = ['START', 'BUILDING', 'FUTURE'];
+    const details = ['Foundation', 'Your Baseline', 'Your Stronger Self'];
+    return Column(
+      children: [
+        Row(
+          children: List.generate(3, (index) {
+            final reached = index <= stage;
+            final active = index == stage;
+            return Expanded(
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: reached
+                          ? active
+                                ? const Color(0xFFFFD45C)
+                                : const Color(0xFF55DEA0)
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: reached
+                            ? active
+                                  ? const Color(0xFFFFD45C)
+                                  : const Color(0xFF55DEA0)
+                            : Colors.white30,
+                        width: 3,
+                      ),
+                    ),
+                    child: reached && !active
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 18,
+                            color: Color(0xFF07503C),
+                          )
+                        : active
+                        ? const Center(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Color(0xFF116149),
+                                shape: BoxShape.circle,
+                              ),
+                              child: SizedBox(width: 13, height: 13),
+                            ),
+                          )
+                        : null,
+                  ),
+                  if (index < 2)
+                    Expanded(
+                      child: Container(
+                        height: 3,
+                        color: index < stage
+                            ? const Color(0xFF55DEA0)
+                            : Colors.white24,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: List.generate(
+            3,
+            (index) => Expanded(
+              child: Column(
+                crossAxisAlignment: index == 2
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    labels[index],
+                    style: TextStyle(
+                      color: index == stage
+                          ? const Color(0xFFFFD45C)
+                          : Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .8,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    details[index],
+                    textAlign: index == 2 ? TextAlign.right : TextAlign.left,
+                    style: const TextStyle(
+                      color: Color(0xFFB7D8CC),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildHeroProgress() {
     final progress = _state!.progress;
@@ -370,109 +578,259 @@ class _VisionScreenState extends State<VisionScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        if (progress.canShowPercentage) ...[
-          Text(
-            '${(progress.overallProgress * 100).round()}%',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 31,
-              fontWeight: FontWeight.w900,
+        Row(
+          children: [
+            const Icon(
+              Icons.bar_chart_rounded,
+              color: Color(0xFF55DEA0),
+              size: 25,
             ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Toward my Vision',
-            style: TextStyle(color: Color(0xFFD8F2E8), fontSize: 14),
-          ),
-        ] else ...[
-          const Text(
-            'BUILDING YOUR BASELINE',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              letterSpacing: .3,
+            const SizedBox(width: 10),
+            Text(
+              progress.canShowPercentage
+                  ? '${(progress.overallProgress * 100).round()}% toward my Vision'
+                  : 'BUILDING YOUR BASELINE',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
             ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          progress.canShowPercentage
+              ? progress.summary
+              : 'Your progress picture will become clearer as you complete training and Body Progress checks.',
+          style: const TextStyle(
+            color: Color(0xFFD8F2E8),
+            fontSize: 12,
+            height: 1.4,
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Your progress picture will become clearer as you complete training and Body Progress checks.',
-            style: TextStyle(
-              color: Color(0xFFD8F2E8),
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-        ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: progress.signals.take(3).map((signal) {
+            final color = switch (signal.type) {
+              VisionProgressSignalType.foundation => const Color(0xFF59E39F),
+              VisionProgressSignalType.trainingAdherence => const Color(
+                0xFF59C9FF,
+              ),
+              _ => const Color(0xFFFFC857),
+            };
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .08),
+                border: Border.all(color: color.withValues(alpha: .7)),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    signal.available
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    size: 14,
+                    color: color,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    _progressSignalLabel(signal.type),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
       ],
     );
   }
+
+  String _progressSignalLabel(VisionProgressSignalType type) => switch (type) {
+    VisionProgressSignalType.foundation => 'Foundation',
+    VisionProgressSignalType.bodyProgress => 'Body Progress',
+    VisionProgressSignalType.trainingAdherence => 'Training',
+    VisionProgressSignalType.consistency => 'Consistency',
+    VisionProgressSignalType.wearable => 'Wearable',
+  };
 
   Widget _buildHeroMilestone() {
     final milestone = _state!.milestones.nextMilestone;
     if (milestone == null) {
       return const SizedBox.shrink();
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'NEXT MILESTONE',
-          style: TextStyle(
-            color: Color(0xFFBDE8D7),
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
+    final accent = _milestoneAccent(milestone.category, milestone.status);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0A4A39), Color(0xFF073B30)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: .42)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: .16),
+            blurRadius: 16,
+            offset: Offset(0, 6),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          milestone.title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '${_milestoneValue(milestone.currentValue)} / ${_milestoneValue(milestone.targetValue)}',
-          style: const TextStyle(color: Color(0xFFD8F2E8), fontSize: 13),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          _state!.intelligence.milestoneExplanation,
-          style: const TextStyle(
-            color: Color(0xFFD8F2E8),
-            fontSize: 12,
-            height: 1.35,
-          ),
-        ),
-        const SizedBox(height: 9),
-        LinearProgressIndicator(
-          value: milestone.normalizedProgress,
-          minHeight: 5,
-          borderRadius: BorderRadius.circular(99),
-          backgroundColor: Colors.white.withValues(alpha: .18),
-          color: Colors.white,
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => VisionMilestonesScreen(state: _state!.milestones),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 700;
+          final content = Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              VisionMilestoneProgressRing(
+                progress: milestone.normalizedProgress,
+                status: milestone.status,
+                icon: _milestoneIcon(milestone.category),
+                accent: accent,
+                size: 52,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'NEXT MILESTONE',
+                                style: TextStyle(
+                                  color: Color(0xFFAED6C7),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              Text(
+                                milestone.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${_milestoneValue(milestone.currentValue)} / ${_milestoneValue(milestone.targetValue)}',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      _state!.intelligence.milestoneExplanation,
+                      style: const TextStyle(
+                        color: Color(0xFFC5DED5),
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    VisionMilestoneProgressBar(
+                      progress: milestone.normalizedProgress,
+                      status: milestone.status,
+                      accent: const Color(0xFFB9FFE0),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final button = OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    VisionMilestonesScreen(state: _state!.milestones),
+              ),
             ),
-          ),
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(0, 34),
-          ),
-          child: const Text('View All Milestones'),
-        ),
-      ],
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              backgroundColor: Colors.white.withValues(alpha: .06),
+              foregroundColor: Colors.white,
+              side: BorderSide(color: accent.withValues(alpha: .55)),
+            ),
+            iconAlignment: IconAlignment.end,
+            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+            label: const Text('View All Milestones'),
+          );
+          return wide
+              ? Row(
+                  children: [
+                    Expanded(child: content),
+                    const SizedBox(width: 24),
+                    button,
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [content, const SizedBox(height: 14), button],
+                );
+        },
+      ),
     );
+  }
+
+  IconData _milestoneIcon(
+    VisionMilestoneCategory category,
+  ) => switch (category) {
+    VisionMilestoneCategory.bodyTransformation ||
+    VisionMilestoneCategory.bodyProgress => Icons.assignment_turned_in_outlined,
+    VisionMilestoneCategory.training ||
+    VisionMilestoneCategory.strength => Icons.fitness_center_rounded,
+    VisionMilestoneCategory.consistency => Icons.local_fire_department_outlined,
+    VisionMilestoneCategory.nutrition => Icons.restaurant_outlined,
+  };
+
+  Color _milestoneAccent(
+    VisionMilestoneCategory category,
+    VisionMilestoneStatus status,
+  ) {
+    if (status == VisionMilestoneStatus.locked) {
+      return const Color(0xFF81958E);
+    }
+    if (status == VisionMilestoneStatus.completed) {
+      return const Color(0xFF68EDAA);
+    }
+    return switch (category) {
+      VisionMilestoneCategory.training ||
+      VisionMilestoneCategory.strength => const Color(0xFF62C8FF),
+      VisionMilestoneCategory.bodyProgress ||
+      VisionMilestoneCategory.bodyTransformation => const Color(0xFFFFD166),
+      VisionMilestoneCategory.consistency => const Color(0xFF68EDAA),
+      VisionMilestoneCategory.nutrition => const Color(0xFF8DDFC5),
+    };
   }
 
   String _milestoneValue(double value) => value == value.roundToDouble()
@@ -1829,38 +2187,121 @@ class _Eyebrow extends StatelessWidget {
 }
 
 class _HeroContext extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
 
-  const _HeroContext({required this.label, required this.value});
+  const _HeroContext({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Row(
     children: [
-      Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFFBDE8D7),
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.1,
+      Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0xFF35B978).withValues(alpha: .8),
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, color: Colors.white, size: 21),
       ),
-      const SizedBox(height: 7),
-      Text(
-        value,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          height: 1.25,
-          fontWeight: FontWeight.w700,
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFFBDE8D7),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.2,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     ],
   );
+}
+
+class _HeroMountainVisual extends StatelessWidget {
+  const _HeroMountainVisual();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(.55, -.45),
+              radius: .75,
+              colors: [Color(0x66FFE8A3), Color(0x00156C52)],
+            ),
+          ),
+        ),
+        CustomPaint(painter: _MountainPainter()),
+        const Positioned(
+          right: 72,
+          top: 72,
+          child: Icon(
+            Icons.accessibility_new_rounded,
+            size: 54,
+            color: Color(0xA6E8F5EF),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MountainPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final far = Path()
+      ..moveTo(0, size.height * .72)
+      ..lineTo(size.width * .20, size.height * .48)
+      ..lineTo(size.width * .34, size.height * .62)
+      ..lineTo(size.width * .52, size.height * .38)
+      ..lineTo(size.width * .72, size.height * .61)
+      ..lineTo(size.width, size.height * .33)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(far, Paint()..color = const Color(0x382D9470));
+
+    final near = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(size.width * .31, size.height * .61)
+      ..lineTo(size.width * .43, size.height * .72)
+      ..lineTo(size.width * .65, size.height * .48)
+      ..lineTo(size.width, size.height * .78)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(near, Paint()..color = const Color(0x7005332A));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _JourneyFact extends StatelessWidget {

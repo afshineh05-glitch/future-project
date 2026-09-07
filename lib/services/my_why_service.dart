@@ -74,9 +74,13 @@ class MyWhyService {
     final text = !hasUnrecoverableLegacy && entry?.hasText == true
         ? await _decryptEntryText(entry!, user.id)
         : null;
+    final voiceRecordings = hasUnrecoverableLegacy
+        ? const <MyWhyVoiceRecording>[]
+        : await _loadVoiceRecordings(user.id, entry);
     return MyWhyViewState(
       entry: entry,
       text: text,
+      voiceRecordings: voiceRecordings,
       migratedLegacyText: migrated,
       hasUnrecoverableLegacy: hasUnrecoverableLegacy,
     );
@@ -130,14 +134,14 @@ class MyWhyService {
     });
   }
 
-  Future<MyWhyEntry> saveMedia({
-    required MyWhyMediaKind kind,
+  Future<MyWhyEntry> saveVideo({
     required Uint8List clearBytes,
     required Duration duration,
     required String playbackExtension,
     required String playbackMimeType,
     bool startFreshIfLegacyUnrecoverable = false,
   }) async {
+    const kind = MyWhyMediaKind.video;
     _validateMedia(kind, clearBytes.length, duration);
     final user = _requireUser();
     final key = await _v2KeyForWrite(user.id);
@@ -207,6 +211,140 @@ class MyWhyService {
     }
   }
 
+  Future<MyWhyVoiceRecording> addVoiceRecording({
+    required Uint8List clearBytes,
+    required Duration duration,
+    required String playbackExtension,
+    required String playbackMimeType,
+    bool startFreshIfLegacyUnrecoverable = false,
+  }) async {
+    _validateMedia(MyWhyMediaKind.voice, clearBytes.length, duration);
+    final user = _requireUser();
+    final key = await _v2KeyForWrite(user.id);
+    final encrypted = await _encryption.encryptBytes(
+      plaintext: clearBytes,
+      keyBytes: key,
+      userId: user.id,
+      purpose: MyWhyMediaKind.voice.name,
+    );
+    final existing = await _prepareForV2Write(
+      user.id,
+      startFreshIfLegacyUnrecoverable: startFreshIfLegacyUnrecoverable,
+    );
+    final entry =
+        existing ??
+        await _upsertAndReturn({
+          'user_id': user.id,
+          'encryption_version': MyWhyEncryptionService.currentVersion,
+          'updated_at': _now(),
+        });
+    final path = '${user.id}/voice/${_randomObjectName()}.bin';
+    await _supabase.storage
+        .from(bucket)
+        .uploadBinary(
+          path,
+          encrypted.cipherText,
+          fileOptions: const FileOptions(
+            contentType: 'application/octet-stream',
+            cacheControl: '0',
+            upsert: false,
+          ),
+        );
+    try {
+      final row = await _supabase
+          .from('my_why_voice_recordings')
+          .insert({
+            'entry_id': entry.id,
+            'user_id': user.id,
+            'storage_path': path,
+            'encryption_nonce': encrypted.nonceBase64,
+            'encryption_mac': encrypted.macBase64,
+            'metadata': {
+              'duration_seconds': duration.inSeconds,
+              'clear_byte_length': clearBytes.length,
+              'playback_extension': _safeExtension(playbackExtension),
+              'playback_mime_type': playbackMimeType,
+            },
+            'encryption_version': encrypted.version,
+          })
+          .select()
+          .single();
+      return MyWhyVoiceRecording.fromMap(row);
+    } catch (_) {
+      try {
+        await _supabase.storage.from(bucket).remove([path]);
+      } catch (_) {
+        // RLS protects an encrypted orphan if cleanup fails.
+      }
+      rethrow;
+    }
+  }
+
+  Future<String> createVoicePlaybackFile(MyWhyVoiceRecording recording) async {
+    final user = _requireUser();
+    if (recording.userId != user.id) throw const MyWhyAccessException();
+    final key = recording.encryptionVersion == 1
+        ? await _requiredLegacyV1Key(user.id)
+        : await _v2KeyForWrite(user.id);
+    final encrypted = await _supabase.storage
+        .from(bucket)
+        .download(recording.storagePath);
+    final clear = await _encryption.decryptBytes(
+      payload: MyWhyEncryptedPayload.fromBase64(
+        cipherText: base64Encode(encrypted),
+        nonce: recording.encryptionNonce,
+        mac: recording.encryptionMac,
+        version: recording.encryptionVersion,
+      ),
+      keyBytes: key,
+      userId: user.id,
+      purpose: MyWhyMediaKind.voice.name,
+    );
+    final extension = Platform.isWindows
+        ? 'aac'
+        : _safeExtension(
+            recording.metadata['playback_extension']?.toString() ?? 'm4a',
+          );
+    final directory = await getTemporaryDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}my_why_voice_${DateTime.now().microsecondsSinceEpoch}.$extension',
+    );
+    await file.writeAsBytes(clear, flush: true);
+    _temporaryPlaybackPaths.add(file.path);
+    return file.path;
+  }
+
+  Future<void> deleteVoiceRecording(MyWhyVoiceRecording recording) async {
+    final user = _requireUser();
+    if (recording.userId != user.id) throw const MyWhyAccessException();
+    await _supabase.storage.from(bucket).remove([recording.storagePath]);
+    try {
+      if (recording.isLegacyEntryVoice) {
+        await _supabase
+            .from('my_why_entries')
+            .update({
+              'voice_storage_path': null,
+              'voice_encryption_nonce': null,
+              'voice_encryption_mac': null,
+              'voice_metadata': null,
+              'updated_at': _now(),
+            })
+            .eq('id', recording.id.substring('legacy:'.length))
+            .eq('user_id', user.id);
+      } else {
+        await _supabase
+            .from('my_why_voice_recordings')
+            .delete()
+            .eq('id', recording.id)
+            .eq('user_id', user.id);
+      }
+    } catch (_) {
+      throw const MyWhyPartialFailureException(
+        'The encrypted voice was deleted, but its metadata could not be removed. Please retry.',
+      );
+    }
+  }
+
   Future<String> createPlaybackFile(
     MyWhyEntry entry,
     MyWhyMediaKind kind,
@@ -258,7 +396,8 @@ class MyWhyService {
     return file.path;
   }
 
-  Future<MyWhyEntry?> deleteMedia(MyWhyMediaKind kind) async {
+  Future<MyWhyEntry?> deleteVideo() async {
+    const kind = MyWhyMediaKind.video;
     final user = _requireUser();
     final entry = await _loadEntry(user.id);
     if (entry == null) return null;
@@ -287,8 +426,12 @@ class MyWhyService {
     final user = _requireUser();
     final entry = await _loadEntry(user.id);
     if (entry == null) return;
+    final voiceRecordings = await _loadVoiceRecordings(user.id, entry);
     final paths = [
       if (entry.voiceStoragePath != null) entry.voiceStoragePath!,
+      ...voiceRecordings
+          .where((recording) => !recording.isLegacyEntryVoice)
+          .map((recording) => recording.storagePath),
       if (entry.videoStoragePath != null) entry.videoStoragePath!,
     ];
     if (paths.isNotEmpty) await _supabase.storage.from(bucket).remove(paths);
@@ -323,6 +466,30 @@ class MyWhyService {
         .eq('user_id', userId)
         .maybeSingle();
     return row == null ? null : MyWhyEntry.fromMap(row);
+  }
+
+  Future<List<MyWhyVoiceRecording>> _loadVoiceRecordings(
+    String userId,
+    MyWhyEntry? entry,
+  ) async {
+    final rows = await _supabase
+        .from('my_why_voice_recordings')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    final recordings = rows
+        .map(
+          (row) => MyWhyVoiceRecording.fromMap(Map<String, dynamic>.from(row)),
+        )
+        .toList();
+    if (entry?.voiceStoragePath != null &&
+        entry?.voiceEncryptionNonce != null &&
+        entry?.voiceEncryptionMac != null &&
+        entry?.voiceMetadata != null) {
+      recordings.add(MyWhyVoiceRecording.fromLegacyEntry(entry!));
+      recordings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+    return recordings;
   }
 
   Future<String> _decryptEntryText(MyWhyEntry entry, String userId) async {

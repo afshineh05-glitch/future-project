@@ -69,15 +69,69 @@ class MyWhyEntry {
       value is Map ? Map<String, dynamic>.from(value) : null;
 }
 
+class MyWhyVoiceRecording {
+  final String id;
+  final String userId;
+  final String storagePath;
+  final String encryptionNonce;
+  final String encryptionMac;
+  final Map<String, dynamic> metadata;
+  final int encryptionVersion;
+  final DateTime createdAt;
+  final bool isLegacyEntryVoice;
+
+  const MyWhyVoiceRecording({
+    required this.id,
+    required this.userId,
+    required this.storagePath,
+    required this.encryptionNonce,
+    required this.encryptionMac,
+    required this.metadata,
+    required this.encryptionVersion,
+    required this.createdAt,
+    this.isLegacyEntryVoice = false,
+  });
+
+  Duration get duration =>
+      Duration(seconds: (metadata['duration_seconds'] as num?)?.toInt() ?? 0);
+
+  factory MyWhyVoiceRecording.fromMap(Map<String, dynamic> map) =>
+      MyWhyVoiceRecording(
+        id: map['id']?.toString() ?? '',
+        userId: map['user_id']?.toString() ?? '',
+        storagePath: map['storage_path']?.toString() ?? '',
+        encryptionNonce: map['encryption_nonce']?.toString() ?? '',
+        encryptionMac: map['encryption_mac']?.toString() ?? '',
+        metadata: MyWhyEntry._map(map['metadata']) ?? const {},
+        encryptionVersion: (map['encryption_version'] as num?)?.toInt() ?? 1,
+        createdAt: DateTime.parse(map['created_at'].toString()),
+      );
+
+  factory MyWhyVoiceRecording.fromLegacyEntry(MyWhyEntry entry) =>
+      MyWhyVoiceRecording(
+        id: 'legacy:${entry.id}',
+        userId: entry.userId,
+        storagePath: entry.voiceStoragePath!,
+        encryptionNonce: entry.voiceEncryptionNonce!,
+        encryptionMac: entry.voiceEncryptionMac!,
+        metadata: entry.voiceMetadata!,
+        encryptionVersion: entry.encryptionVersion,
+        createdAt: entry.updatedAt,
+        isLegacyEntryVoice: true,
+      );
+}
+
 class MyWhyViewState {
   final MyWhyEntry? entry;
   final String? text;
+  final List<MyWhyVoiceRecording> voiceRecordings;
   final bool migratedLegacyText;
   final bool hasUnrecoverableLegacy;
 
   const MyWhyViewState({
     required this.entry,
     required this.text,
+    this.voiceRecordings = const [],
     this.migratedLegacyText = false,
     this.hasUnrecoverableLegacy = false,
   });

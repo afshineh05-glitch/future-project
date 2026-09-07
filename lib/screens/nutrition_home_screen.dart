@@ -10,6 +10,7 @@ import 'package:future_project/models/recovery_nutrition.dart';
 import 'package:future_project/models/smart_supplement.dart';
 import 'package:future_project/screens/calorie_scanner_screen.dart';
 import 'package:future_project/screens/cook_for_goal_recipe_screen.dart';
+import 'package:future_project/screens/intelligent_fridge_screen.dart';
 import 'package:future_project/screens/nutrition_profile_screen.dart';
 import 'package:future_project/services/food_visual_service.dart';
 import 'package:future_project/services/cook_for_goal_recipe_service.dart';
@@ -554,6 +555,30 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
     await _loadPerformanceFuel();
   }
 
+  void _openIntelligentFridge() {
+    final fuel = _performanceFuel;
+    final profile = _profile;
+    if (fuel == null || profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your nutrition targets are still loading.'),
+        ),
+      );
+      return;
+    }
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => IntelligentFridgeScreen(
+          fuel: fuel,
+          profile: profile,
+          trainingDays: _recoveryContext?.trainingDaysPerWeek ?? 0,
+          recipes: _cookForGoalRecipes,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
@@ -721,6 +746,15 @@ class _NutritionHomeScreenState extends State<NutritionHomeScreen> {
             error: _recipeError,
             onRetry: _refreshCookForGoal,
             onTryAnother: _tryAnotherRecipe,
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: _openIntelligentFridge,
+              icon: const Icon(Icons.kitchen_outlined, size: 18),
+              label: const Text('Intelligent Fridge'),
+            ),
           ),
           const SizedBox(height: 28),
           SmartSupplementSection(
