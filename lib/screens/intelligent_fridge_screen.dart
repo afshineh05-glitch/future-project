@@ -77,7 +77,45 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
     _repository = SupabaseFridgeInventoryRepository();
     _service = IntelligentFridgeService(repository: _repository);
     _imageService = IngredientImageService();
+    _loadIngredientImages();
     _load();
+  }
+
+  void _loadIngredientImages() {
+    final images = <String, Future<FoodVisual>>{};
+    for (final food in FridgeFoodCatalog.allowedFor(widget.profile)) {
+      images[food.key] = _imageService.resolve(
+        ingredientKey: food.key,
+        displayName: food.name,
+      );
+    }
+    _ingredientImages.addAll(images);
+  }
+
+  Future<void> _refreshIngredientImages() async {
+    final foods = FridgeFoodCatalog.allowedFor(widget.profile).toList();
+    await Future.wait(foods.map((food) => _imageService.invalidate(food.key)));
+    if (!mounted) return;
+    final images = <String, Future<FoodVisual>>{
+      for (final food in foods)
+        food.key: _imageService.resolve(
+          ingredientKey: food.key,
+          displayName: food.name,
+        ),
+    };
+    setState(() {
+      _ingredientImages
+        ..clear()
+        ..addAll(images);
+    });
+  }
+
+  Future<void> _openImageCurator() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const IngredientImageCuratorScreen()),
+    );
+    if (!mounted) return;
+    await _refreshIngredientImages();
   }
 
   Future<void> _load() async {
@@ -372,11 +410,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
           if (kDebugMode)
             IconButton(
               tooltip: 'Curate Ingredient Images',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IngredientImageCuratorScreen(),
-                ),
-              ),
+              onPressed: _openImageCurator,
               icon: const Icon(Icons.collections_outlined),
             ),
         ],
@@ -599,13 +633,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
   }
 
   Future<FoodVisual> _ingredientImage(FridgeFoodReference food) =>
-      _ingredientImages.putIfAbsent(
-        food.key,
-        () => _imageService.resolve(
-          ingredientKey: food.key,
-          displayName: food.name,
-        ),
-      );
+      _ingredientImages[food.key]!;
 
   List<Widget> _preferenceChips() =>
       FridgeFoodCatalog.allowedFor(widget.profile)

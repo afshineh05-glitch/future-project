@@ -55,7 +55,7 @@ type IngredientCategory =
 
 type FoodSearchPlan = {
   foodKey: string;
-  query: string;
+  queries: string[];
   requiredKeywords: string[];
   preferredKeywords: string[];
   category: IngredientCategory;
@@ -114,7 +114,7 @@ const CANONICAL_SEARCH_QUERIES: Record<string, string> = {
   pork_tenderloin: "raw pork tenderloin meat",
   fish: "raw fish fillet isolated seafood",
   salmon: "raw salmon fillet",
-  tuna: "raw tuna steak",
+  tuna: "fresh raw tuna fish",
   cod: "raw cod fillet",
   tilapia: "raw tilapia fillet",
   trout: "raw trout fillet",
@@ -194,6 +194,34 @@ const CANONICAL_REQUIRED_KEYWORDS: Record<string, string[]> = {
   avocado: ["avocado"],
   nuts: ["nut"],
   seeds: ["seed"],
+};
+
+const CANONICAL_FALLBACK_QUERIES: Record<string, string[]> = {
+  lean_ground_turkey: ["ground turkey meat", "raw minced turkey meat"],
+  tuna: ["tuna fish"],
+};
+
+const AMBIGUOUS_FOOD_CONTEXT: Partial<Record<string, {
+  requiredAny: string[];
+  blocked: string[];
+}>> = {
+  turkey: {
+    requiredAny: ["meat", "poultry", "raw", "ingredient", "food"],
+    blocked: [
+      "istanbul", "turkey country", "mosque", "architecture", "ottoman",
+      "travel", "tourism", "city", "building", "landmark",
+    ],
+  },
+  lean_ground_turkey: {
+    requiredAny: [
+      "turkey meat", "ground meat", "minced meat", "poultry", "raw meat",
+      "ingredient",
+    ],
+    blocked: [
+      "istanbul", "turkey country", "mosque", "architecture", "ottoman",
+      "travel", "tourism", "city", "building", "landmark",
+    ],
+  },
 };
 
 const GENERIC_FOOD_WORDS = new Set([
@@ -529,10 +557,17 @@ function searchPlanFor(foodKey: string, displayName: string): FoodSearchPlan {
   const requiredKeywords = CANONICAL_REQUIRED_KEYWORDS[foodKey] ?? nameWords;
   const query = CANONICAL_SEARCH_QUERIES[foodKey] ??
     fallbackQueryFor(displayName, category);
+  const queries = [query, ...(CANONICAL_FALLBACK_QUERIES[foodKey] ?? [])];
   const preferredKeywords = normalizeSearchText(query)
     .split(" ")
     .filter((word) => word.length > 2 && !GENERIC_FOOD_WORDS.has(word));
-  return { foodKey, query, requiredKeywords, preferredKeywords, category };
+  return {
+    foodKey,
+    queries,
+    requiredKeywords,
+    preferredKeywords,
+    category,
+  };
 }
 
 function photoRelevanceScore(
@@ -544,6 +579,36 @@ function photoRelevanceScore(
   if (BLOCKED_PHOTO_TERMS.some((term) =>
     term.includes(" ") ? metadata.includes(term) : containsKeyword(metadata, term)
   )) return null;
+
+  if (plan.foodKey === "lean_ground_turkey") {
+    const hasTurkeyMeatContext = containsKeyword(metadata, "turkey") &&
+      (["meat", "poultry"].some((term) => containsKeyword(metadata, term)));
+    const hasGroundOrMincedContext = ["ground", "minced"].some((term) =>
+      containsKeyword(metadata, term)
+    );
+    const blockedLeanGroundTurkeyTerms = [
+      "grill", "grilled", "grilling", "cooked", "kebab", "kabob",
+      "shashlik", "skewer", "barbecue", "bbq", "roasted", "fried",
+      "recipe", "meal", "bird", "animal", "wildlife", "farm animal",
+      "live turkey",
+    ];
+    if (!hasTurkeyMeatContext || !hasGroundOrMincedContext ||
+      blockedLeanGroundTurkeyTerms.some((term) =>
+        term.includes(" ")
+          ? metadata.includes(term)
+          : containsKeyword(metadata, term)
+      )) return null;
+  }
+
+  const ambiguousContext = AMBIGUOUS_FOOD_CONTEXT[plan.foodKey];
+  if (ambiguousContext) {
+    if (ambiguousContext.blocked.some((term) =>
+      term.includes(" ") ? metadata.includes(term) : containsKeyword(metadata, term)
+    )) return null;
+    if (!ambiguousContext.requiredAny.some((term) =>
+      term.includes(" ") ? metadata.includes(term) : containsKeyword(metadata, term)
+    )) return null;
+  }
 
   // Every canonical keyword must be represented. This prevents, for example,
   // a chicken result from being stored for turkey, or an unrelated bottle from
@@ -580,6 +645,12 @@ function photoRelevanceScore(
     (total, keyword) => total + (containsKeyword(metadata, keyword) ? 2 : 0),
     0,
   );
+  if (ambiguousContext) {
+    score += ambiguousContext.requiredAny.reduce(
+      (total, term) => total + (metadata.includes(term) ? 4 : 0),
+      0,
+    );
+  }
   for (const preferred of [
     "isolated",
     "ingredient",
@@ -609,36 +680,7 @@ function curatorRelevanceScore(
   metadataValue: string,
   plan: FoodSearchPlan,
 ): number | null {
-  const metadata = normalizeSearchText(metadataValue);
-  if (!metadata) return 0;
-  if (BLOCKED_PHOTO_TERMS.some((term) =>
-    term.includes(" ") ? metadata.includes(term) : containsKeyword(metadata, term)
-  )) return null;
-
-  let score = plan.requiredKeywords.reduce(
-    (total, keyword) => total + (containsKeyword(metadata, keyword) ? 10 : 0),
-    0,
-  );
-  score += plan.preferredKeywords.reduce(
-    (total, keyword) => total + (containsKeyword(metadata, keyword) ? 2 : 0),
-    0,
-  );
-  for (const preferred of [
-    "isolated",
-    "ingredient",
-    "raw",
-    "fresh",
-    "whole",
-    "fillet",
-    "plain",
-  ]) {
-    if (containsKeyword(metadata, preferred)) score += 2;
-  }
-  if ((plan.category === "raw_protein" || plan.category === "seafood") &&
-    COOKED_PROTEIN_TERMS.some((term) => containsKeyword(metadata, term))) {
-    score -= 8;
-  }
-  return score;
+  return photoRelevanceScore(metadataValue, plan);
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -735,37 +777,46 @@ async function curatorPexelsCandidates(
 ): Promise<CuratorCandidate[]> {
   if (!apiKey) return [];
   const plan = searchPlanFor(foodKey, displayName);
-  const url = new URL("https://api.pexels.com/v1/search");
-  url.searchParams.set("query", plan.query);
-  url.searchParams.set("per_page", "24");
-  url.searchParams.set("page", String(page));
-  url.searchParams.set("orientation", "square");
-  const response = await fetch(url, {
-    headers: { Authorization: apiKey },
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!response.ok) throw new Error(`Pexels search returned ${response.status}.`);
-  const payload = await response.json() as { photos?: PexelsPhoto[] };
-  return (payload.photos ?? []).map((photo) => {
-    const downloadUrl = photo.src?.large2x ?? photo.src?.large ??
-      photo.src?.original ?? "";
-    const metadata = String(photo.alt ?? "").trim();
-    return {
-      provider: "pexels" as const,
-      providerId: String(photo.id ?? ""),
-      previewUrl: photo.src?.large ?? downloadUrl,
-      downloadUrl,
-      metadata,
-      score: curatorRelevanceScore(`${metadata} ${photo.url ?? ""}`, plan),
-      pageUrl: photo.url?.trim() || null,
-      query: plan.query,
-    };
-  }).filter((candidate) =>
-    candidate.providerId && candidate.previewUrl && candidate.downloadUrl &&
-    candidate.score !== null &&
-    isAllowedProviderImageUrl("pexels", candidate.downloadUrl)
-  ).sort((left, right) => (right.score ?? 0) - (left.score ?? 0)).slice(0, 6)
-    .map((candidate) => ({ ...candidate, score: candidate.score ?? 0 }));
+  const search = async (query: string): Promise<CuratorCandidate[]> => {
+    const url = new URL("https://api.pexels.com/v1/search");
+    url.searchParams.set("query", query);
+    url.searchParams.set("per_page", "24");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("orientation", "square");
+    const response = await fetch(url, {
+      headers: { Authorization: apiKey },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) {
+      throw new Error(`Pexels search returned ${response.status}.`);
+    }
+    const payload = await response.json() as { photos?: PexelsPhoto[] };
+    return (payload.photos ?? []).map((photo) => {
+      const downloadUrl = photo.src?.large2x ?? photo.src?.large ??
+        photo.src?.original ?? "";
+      const metadata = String(photo.alt ?? "").trim();
+      return {
+        provider: "pexels" as const,
+        providerId: String(photo.id ?? ""),
+        previewUrl: photo.src?.large ?? downloadUrl,
+        downloadUrl,
+        metadata,
+        score: curatorRelevanceScore(`${metadata} ${photo.url ?? ""}`, plan),
+        pageUrl: photo.url?.trim() || null,
+        query,
+      };
+    }).filter((candidate) =>
+      candidate.providerId && candidate.previewUrl && candidate.downloadUrl &&
+      candidate.score !== null &&
+      isAllowedProviderImageUrl("pexels", candidate.downloadUrl)
+    ).sort((left, right) => (right.score ?? 0) - (left.score ?? 0)).slice(0, 6)
+      .map((candidate) => ({ ...candidate, score: candidate.score ?? 0 }));
+  };
+  for (const query of plan.queries) {
+    const candidates = await search(query);
+    if (candidates.length > 0) return candidates;
+  }
+  return [];
 }
 
 async function curatorPixabayCandidates(
@@ -773,6 +824,7 @@ async function curatorPixabayCandidates(
   foodKey: string,
   displayName: string,
   page: number,
+  queryIndex = 0,
 ): Promise<PixabayCandidateResult> {
   if (!apiKey) {
     return {
@@ -786,9 +838,10 @@ async function curatorPixabayCandidates(
     };
   }
   const plan = searchPlanFor(foodKey, displayName);
+  const query = plan.queries[queryIndex];
   const url = new URL("https://pixabay.com/api/");
   url.searchParams.set("key", apiKey);
-  url.searchParams.set("q", plan.query);
+  url.searchParams.set("q", query);
   url.searchParams.set("image_type", "photo");
   url.searchParams.set("safesearch", "true");
   url.searchParams.set("per_page", "24");
@@ -843,6 +896,15 @@ async function curatorPixabayCandidates(
   }
   const hits = payload.hits ?? [];
   if (hits.length === 0) {
+    if (queryIndex + 1 < plan.queries.length) {
+      return await curatorPixabayCandidates(
+        apiKey,
+        foodKey,
+        displayName,
+        page,
+        queryIndex + 1,
+      );
+    }
     return {
       candidates: [],
       diagnostic: {
@@ -864,7 +926,7 @@ async function curatorPixabayCandidates(
       metadata,
       score: curatorRelevanceScore(`${metadata} ${photo.pageURL ?? ""}`, plan),
       pageUrl: photo.pageURL?.trim() || null,
-      query: plan.query,
+      query,
     };
   }).filter((candidate) =>
     candidate.providerId && candidate.previewUrl && candidate.downloadUrl &&
@@ -872,6 +934,15 @@ async function curatorPixabayCandidates(
     isAllowedProviderImageUrl("pixabay", candidate.downloadUrl)
   ).sort((left, right) => (right.score ?? 0) - (left.score ?? 0)).slice(0, 6)
     .map((candidate) => ({ ...candidate, score: candidate.score ?? 0 }));
+  if (candidates.length === 0 && queryIndex + 1 < plan.queries.length) {
+    return await curatorPixabayCandidates(
+      apiKey,
+      foodKey,
+      displayName,
+      page,
+      queryIndex + 1,
+    );
+  }
   return {
     candidates,
     diagnostic: {
@@ -907,10 +978,12 @@ async function searchPexels(
   apiKey: string,
   foodKey: string,
   displayName: string,
+  queryIndex = 0,
 ): Promise<ProviderSelection | null> {
   const plan = searchPlanFor(foodKey, displayName);
+  const query = plan.queries[queryIndex];
   const url = new URL("https://api.pexels.com/v1/search");
-  url.searchParams.set("query", plan.query);
+  url.searchParams.set("query", query);
   url.searchParams.set("per_page", "12");
   url.searchParams.set("orientation", "square");
 
@@ -938,12 +1011,14 @@ async function searchPexels(
     logFoodVisualResolution({
       provider: "pexels",
       foodKey,
-      searchQuery: plan.query,
+      searchQuery: query,
       imageId: "none",
       description: "none",
       validationResult: "failed - no relevant candidate",
     });
-    return null;
+    return queryIndex + 1 < plan.queries.length
+      ? await searchPexels(apiKey, foodKey, displayName, queryIndex + 1)
+      : null;
   }
 
   const photo = selected.item;
@@ -954,7 +1029,7 @@ async function searchPexels(
   logFoodVisualResolution({
     provider: "pexels",
     foodKey,
-    searchQuery: plan.query,
+    searchQuery: query,
     imageId: String(photo.id ?? "unknown"),
     description: String(photo.alt ?? "none"),
     validationResult: `passed - relevance score ${selected.score}`,
@@ -964,7 +1039,7 @@ async function searchPexels(
     imageUrl,
     imageId: String(photo.id ?? ""),
     pageUrl: photo.url?.trim() || null,
-    query: plan.query,
+    query,
     provider: "pexels",
   };
 }
@@ -973,11 +1048,13 @@ async function searchPixabay(
   apiKey: string,
   foodKey: string,
   displayName: string,
+  queryIndex = 0,
 ): Promise<ProviderSelection | null> {
   const plan = searchPlanFor(foodKey, displayName);
+  const query = plan.queries[queryIndex];
   const url = new URL("https://pixabay.com/api/");
   url.searchParams.set("key", apiKey);
-  url.searchParams.set("q", plan.query);
+  url.searchParams.set("q", query);
   url.searchParams.set("image_type", "photo");
   url.searchParams.set("orientation", "horizontal");
   url.searchParams.set("safesearch", "true");
@@ -1007,18 +1084,20 @@ async function searchPixabay(
     logFoodVisualResolution({
       provider: "pixabay",
       foodKey,
-      searchQuery: plan.query,
+      searchQuery: query,
       imageId: "none",
       description: "none",
       validationResult: "failed - no relevant candidate",
     });
-    return null;
+    return queryIndex + 1 < plan.queries.length
+      ? await searchPixabay(apiKey, foodKey, displayName, queryIndex + 1)
+      : null;
   }
 
   logFoodVisualResolution({
     provider: "pixabay",
     foodKey,
-    searchQuery: plan.query,
+    searchQuery: query,
     imageId: String(selected.item.id ?? "unknown"),
     description: String(selected.item.tags ?? "none"),
     validationResult: `passed - relevance score ${selected.score}`,
@@ -1027,7 +1106,7 @@ async function searchPixabay(
     imageUrl: selected.item.largeImageURL ?? selected.item.webformatURL!,
     imageId: String(selected.item.id ?? ""),
     pageUrl: selected.item.pageURL?.trim() || null,
-    query: plan.query,
+    query,
     provider: "pixabay",
   };
 }
@@ -1157,6 +1236,120 @@ async function approveCuratorCandidate(
     imageUrl: saved.image_url,
     provider,
     providerId,
+    status: "approved",
+  });
+}
+
+function manualImageFormat(bytes: Uint8Array): {
+  contentType: "image/jpeg" | "image/png" | "image/webp";
+  extension: "jpg" | "png" | "webp";
+} | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 &&
+    bytes[2] === 0xff) {
+    return { contentType: "image/jpeg", extension: "jpg" };
+  }
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+    bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d &&
+    bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+    return { contentType: "image/png", extension: "png" };
+  }
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 &&
+    bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 &&
+    bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return { contentType: "image/webp", extension: "webp" };
+  }
+  return null;
+}
+
+async function saveManualCuratorImage(
+  admin: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+) {
+  const ingredientKey = String(body.ingredientKey ?? "").trim();
+  const declaredContentType = String(body.contentType ?? "").trim().toLowerCase();
+  const encodedImage = String(body.imageBase64 ?? "").trim();
+  if (!/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(ingredientKey) || !encodedImage ||
+    !["image/jpeg", "image/png", "image/webp"].includes(declaredContentType)) {
+    return jsonResponse({ error: "Invalid manual image upload request." }, 400);
+  }
+  if (encodedImage.length > 11184816) {
+    return jsonResponse({ error: "Manual image must not exceed 8 MB." }, 413);
+  }
+
+  let imageBytes: Uint8Array;
+  try {
+    const binary = atob(encodedImage);
+    imageBytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch (_) {
+    return jsonResponse({ error: "Manual image data is invalid." }, 400);
+  }
+  if (imageBytes.byteLength === 0 || imageBytes.byteLength > 8 * 1024 * 1024) {
+    return jsonResponse({ error: "Manual image must be between 1 byte and 8 MB." }, 413);
+  }
+  const format = manualImageFormat(imageBytes);
+  if (!format || format.contentType !== declaredContentType) {
+    return jsonResponse({ error: "Manual image must be JPEG, PNG, or WebP." }, 415);
+  }
+
+  const current = await findCached(admin, ingredientKey);
+  const storagePath =
+    `curated/manual/${ingredientKey}/${crypto.randomUUID()}.${format.extension}`;
+  const { error: uploadError } = await admin.storage.from(BUCKET).upload(
+    storagePath,
+    imageBytes,
+    { contentType: format.contentType, cacheControl: "31536000", upsert: false },
+  );
+  if (uploadError) {
+    return jsonResponse({ error: "Could not store the manual image." }, 502);
+  }
+
+  const { data: publicUrlData } = admin.storage.from(BUCKET).getPublicUrl(
+    storagePath,
+  );
+  const row = {
+    food_key: ingredientKey,
+    display_name: displayNameForFood(ingredientKey.replaceAll("_", " ")),
+    image_url: publicUrlData.publicUrl,
+    storage_path: storagePath,
+    source: "curated:manual",
+    status: "ready",
+    fetched_at: new Date().toISOString(),
+    retry_after: null,
+    source_image_id: null,
+    source_page_url: null,
+    search_query: null,
+  };
+  const { data: saved, error: saveError } = await admin.from("food_visuals")
+    .upsert(row, { onConflict: "food_key" })
+    .select("food_key, display_name, image_url, storage_path, source, status, retry_after")
+    .maybeSingle();
+  if (saveError || !saved || saved.food_key !== ingredientKey) {
+    await admin.storage.from(BUCKET).remove([storagePath]);
+    return jsonResponse({ error: "Could not save the manual image mapping." }, 502);
+  }
+
+  if (current?.storage_path && current.storage_path !== storagePath &&
+    current.storage_path.startsWith("curated/")) {
+    const { data: references, error: referenceError } = await admin
+      .from("food_visuals")
+      .select("food_key")
+      .eq("storage_path", current.storage_path)
+      .neq("food_key", ingredientKey)
+      .limit(1);
+    if (!referenceError && (references?.length ?? 0) === 0) {
+      const { error: removeError } = await admin.storage.from(BUCKET).remove([
+        current.storage_path,
+      ]);
+      if (removeError) {
+        console.error("Old manual ingredient image cleanup failed.");
+      }
+    }
+  }
+  return jsonResponse({
+    ingredientKey,
+    displayName: saved.display_name,
+    imageUrl: saved.image_url,
+    provider: "manual",
     status: "approved",
   });
 }
@@ -1334,6 +1527,13 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Ingredient image approval is not authorized." }, 403);
       }
       return await approveCuratorCandidate(admin, body, refreshKey);
+    }
+
+    if (action === "manual-upload") {
+      if (!refreshKey || req.headers.get("x-image-refresh-key") !== refreshKey) {
+        return jsonResponse({ error: "Manual ingredient image upload is not authorized." }, 403);
+      }
+      return await saveManualCuratorImage(admin, body);
     }
 
     if (action !== "resolve") {

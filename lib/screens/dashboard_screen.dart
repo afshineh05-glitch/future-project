@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -6,6 +7,7 @@ import 'package:future_project/screens/intelligent_coach_screen.dart';
 import 'package:future_project/screens/journey_screen.dart';
 import 'package:future_project/screens/vision_screen.dart';
 import 'package:future_project/screens/welcome_screen.dart';
+import 'package:future_project/screens/wearable_debug_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/dashboard_card.dart';
 
@@ -56,6 +58,15 @@ class DashboardScreen extends StatelessWidget {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         actions: [
+          if (kDebugMode && defaultTargetPlatform == TargetPlatform.iOS)
+            IconButton(
+              tooltip: 'Test Apple Health',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WearableDebugScreen()),
+              ),
+              icon: const Icon(Icons.watch_outlined),
+            ),
           IconButton(
             tooltip: 'Sign Out',
             onPressed: () {

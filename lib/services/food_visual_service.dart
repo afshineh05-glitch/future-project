@@ -12,6 +12,15 @@ class FoodVisualService {
   FoodVisualService({SupabaseClient? supabase})
     : _supabase = supabase ?? Supabase.instance.client;
 
+  Future<void> invalidateIngredientImage(String ingredientKey) async {
+    final key = ingredientKey.trim().toLowerCase();
+    if (key.isEmpty) return;
+    final requestKey = 'ingredient:$key';
+    await _pendingResolutions[requestKey];
+    _resolvedVisuals.remove(requestKey);
+    _pendingResolutions.remove(requestKey);
+  }
+
   Future<FoodVisual> resolveFoodImage(String foodName) async {
     final displayName = foodName.trim();
     if (displayName.isEmpty) {

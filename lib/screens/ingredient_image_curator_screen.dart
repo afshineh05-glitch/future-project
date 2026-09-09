@@ -1,10 +1,13 @@
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/debug/ingredient_image_refresh_key.dart';
 import 'package:future_project/models/intelligent_fridge.dart';
+import 'package:future_project/services/ingredient_image_service.dart';
 import 'package:future_project/services/intelligent_fridge_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 
@@ -375,6 +378,7 @@ class _CandidateReviewScreen extends StatefulWidget {
 
 class _CandidateReviewScreenState extends State<_CandidateReviewScreen> {
   final _supabase = Supabase.instance.client;
+  final _imageService = IngredientImageService();
   final _updates = <String, _CuratorIngredientState>{};
   final _candidateSessions = <String, _CandidateSession>{};
   late _CuratorIngredientState _current;
@@ -585,6 +589,62 @@ class _CandidateReviewScreenState extends State<_CandidateReviewScreen> {
     }
   }
 
+  Future<void> _addManualImage() async {
+    if (_approvingId != null) return;
+    if (!IngredientImageRefreshKey.hasRefreshKey) {
+      _showMessage(
+        'Upload stopped: INGREDIENT_IMAGE_REFRESH_KEY was not supplied.',
+      );
+      return;
+    }
+    if (_supabase.auth.currentSession == null) {
+      _showMessage('Upload stopped: no signed-in Supabase session exists.');
+      return;
+    }
+    final ingredientKey = _food.key;
+    final ingredientName = _food.name;
+    final selection = await showDialog<_ManualImageSelection>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ManualImageDialog(ingredientName: ingredientName),
+    );
+    if (selection == null || !mounted || _food.key != ingredientKey) return;
+
+    setState(() => _approvingId = 'manual-upload');
+    try {
+      final imageUrl = await _imageService.uploadManualCuratedImage(
+        ingredientKey: ingredientKey,
+        bytes: selection.bytes,
+        contentType: selection.contentType,
+      );
+      final approved = _CuratorIngredientState(
+        ingredientKey: ingredientKey,
+        status: _CuratorStatus.approved,
+        imageUrl: imageUrl,
+        provider: 'manual',
+      );
+      if (!mounted || _food.key != ingredientKey) return;
+      setState(() {
+        _current = approved;
+        _updates[ingredientKey] = approved;
+        _approvingId = null;
+      });
+      _showMessage('Manual image saved for $ingredientName.');
+    } on FunctionException catch (error) {
+      if (!mounted) return;
+      setState(() => _approvingId = null);
+      _showMessage(_functionMessage(error.details));
+    } on StateError catch (error) {
+      if (!mounted) return;
+      setState(() => _approvingId = null);
+      _showMessage(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _approvingId = null);
+      _showMessage('Could not save the manual image.');
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -710,6 +770,20 @@ class _CandidateReviewScreenState extends State<_CandidateReviewScreen> {
                               : const Icon(Icons.add_photo_alternate_outlined),
                           label: const Text('Get More Images'),
                         ),
+                        OutlinedButton.icon(
+                          onPressed: _approvingId == null
+                              ? _addManualImage
+                              : null,
+                          icon: _approvingId == 'manual-upload'
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.upload_file_outlined),
+                          label: const Text('Add My Image'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -791,6 +865,169 @@ class _CandidateReviewScreenState extends State<_CandidateReviewScreen> {
       ),
     );
   }
+}
+
+class _ManualImageSelection {
+  final Uint8List bytes;
+  final String contentType;
+
+  const _ManualImageSelection({required this.bytes, required this.contentType});
+}
+
+class _ManualImageDialog extends StatefulWidget {
+  final String ingredientName;
+
+  const _ManualImageDialog({required this.ingredientName});
+
+  @override
+  State<_ManualImageDialog> createState() => _ManualImageDialogState();
+}
+
+class _ManualImageDialogState extends State<_ManualImageDialog> {
+  static const _maxBytes = 8 * 1024 * 1024;
+  final _picker = ImagePicker();
+  _ManualImageSelection? _selection;
+  String? _error;
+  bool _dragging = false;
+  bool _reading = false;
+
+  Future<void> _chooseImage() async {
+    final file = await _picker.pickImage(source: ImageSource.gallery);
+    if (file != null) await _readFile(file);
+  }
+
+  Future<void> _readFile(XFile file) async {
+    if (_reading) return;
+    setState(() {
+      _reading = true;
+      _error = null;
+    });
+    try {
+      final contentType = _contentTypeFor(file.name);
+      if (contentType == null) {
+        throw const FormatException('Choose a JPEG, PNG, or WebP image.');
+      }
+      final length = await file.length();
+      if (length <= 0) throw const FormatException('The image file is empty.');
+      if (length > _maxBytes) {
+        throw const FormatException('The image must not exceed 8 MB.');
+      }
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _selection = _ManualImageSelection(
+          bytes: bytes,
+          contentType: contentType,
+        );
+        _error = null;
+      });
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not read that image file.');
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
+  }
+
+  String? _contentTypeFor(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Add image for ${widget.ingredientName}'),
+    content: SizedBox(
+      width: 520,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropTarget(
+            onDragEntered: (_) => setState(() => _dragging = true),
+            onDragExited: (_) => setState(() => _dragging = false),
+            onDragDone: (details) {
+              setState(() => _dragging = false);
+              if (details.files.length != 1) {
+                setState(() => _error = 'Drop exactly one image file.');
+                return;
+              }
+              _readFile(details.files.single);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: 280,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: _dragging
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : const Color(0xFFE9ECEA),
+                border: Border.all(
+                  color: _dragging
+                      ? Theme.of(context).colorScheme.primary
+                      : AppTheme.border,
+                  width: _dragging ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _selection == null
+                  ? Center(
+                      child: _reading
+                          ? const CircularProgressIndicator()
+                          : const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  size: 44,
+                                ),
+                                SizedBox(height: 10),
+                                Text('Drag and drop an image here'),
+                                Text('JPEG, PNG, or WebP · maximum 8 MB'),
+                              ],
+                            ),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: Image.memory(
+                        _selection!.bytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Center(
+                          child: Text('This image could not be previewed.'),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _reading ? null : _chooseImage,
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('Choose Image'),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(color: Colors.red)),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _reading ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _selection == null || _reading
+            ? null
+            : () => Navigator.pop(context, _selection),
+        child: const Text('Confirm & Use'),
+      ),
+    ],
+  );
 }
 
 class _IngredientRow extends StatelessWidget {

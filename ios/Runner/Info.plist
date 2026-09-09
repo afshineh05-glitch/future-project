@@ -6,6 +6,8 @@
     <string>Record a private My Why video.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Record private My Why voice and video.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Allow MuscleUp to read your activity, heart, sleep, workout, distance, and body weight data from Apple Health.</string>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
     <key>CFBundleDevelopmentRegion</key>
