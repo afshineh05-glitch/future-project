@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
+import 'package:future_project/models/end_of_day_coach_summary.dart';
+import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
 import 'package:future_project/services/coach_daily_decision_service.dart';
+import 'package:future_project/services/end_of_day_coach_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/today_coach_recovery_advisor.dart';
 import 'package:future_project/services/today_weekly_mission_advisor.dart';
@@ -49,7 +52,11 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   final _decisionService = CoachDailyDecisionService();
   final _weeklyCoachService = WeeklyCoachService();
   final _weeklyMissionAdvisor = const TodayWeeklyMissionAdvisor();
+  final _endOfDayService = EndOfDayCoachService();
+  final _endOfDayEngine = const EndOfDayCoachEngine();
   CoachRecoveryRecommendation? _recoveryRecommendation;
+  RecoveryContext? _recoveryContext;
+  EndOfDayObservation _endOfDayObservation = const EndOfDayObservation();
   WeeklyCoachPlan? _weeklyPlan;
   bool _isPlannedTrainingDay = false;
   CoachDecision? _trainingChoice;
@@ -116,6 +123,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = shouldLoadPriority;
         _recoveryRecommendation = null;
+        _recoveryContext = null;
+        _endOfDayObservation = const EndOfDayObservation();
         _weeklyPlan = null;
         _isPlannedTrainingDay = false;
         _trainingChoice = null;
@@ -132,6 +141,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _loadRecoveryGuidance(row),
           _loadCoachDecision(),
           _loadWeeklyMission(),
+          _loadEndOfDayObservation(),
         ]);
       }
     } catch (_) {
@@ -146,6 +156,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = false;
         _recoveryRecommendation = null;
+        _recoveryContext = null;
+        _endOfDayObservation = const EndOfDayObservation();
         _weeklyPlan = null;
         _isPlannedTrainingDay = false;
         _trainingChoice = null;
@@ -192,6 +204,13 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
     }
   }
 
+  Future<void> _loadEndOfDayObservation() async {
+    final observation = await _endOfDayService.loadTodaySafely();
+    if (mounted) {
+      setState(() => _endOfDayObservation = observation);
+    }
+  }
+
   Future<void> _loadRecoveryGuidance(Map<String, dynamic> foundation) async {
     try {
       final context = await _recoveryService.load();
@@ -213,7 +232,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         ),
       );
       if (mounted) {
-        setState(() => _recoveryRecommendation = recommendation);
+        setState(() {
+          _recoveryContext = context;
+          _recoveryRecommendation = recommendation;
+        });
       }
     } catch (_) {
       // Wearable context is optional. Existing Coach behavior remains intact.
@@ -1008,6 +1030,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           ),
           const SizedBox(height: 14),
           _buildAskCoach(),
+          const SizedBox(height: 18),
+          _buildEveningWrapUp(),
         ],
       ),
     );
@@ -1473,12 +1497,64 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
       );
     }
 
+    final foundation = _foundation ?? const <String, dynamic>{};
+    final EndOfDayCoachSummary? summary = _endOfDayEngine.evaluate(
+      EndOfDayCoachInput(
+        now: DateTime.now(),
+        weeklyPlan: _weeklyPlan,
+        dailyDecision: _trainingChoice,
+        recoveryContext: _recoveryContext,
+        observation: _endOfDayObservation,
+        selfReportedPain: _hasSelfReportedPain(foundation),
+        selfReportedFatigue: _hasSelfReportedFatigue(foundation),
+      ),
+    );
     return _CoachCard(
       icon: Icons.nights_stay_outlined,
-      title: 'How did today go?',
+      title: 'Evening check-in',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (summary != null) ...[
+            Text(
+              summary.headline,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              summary.progressRecognition,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            if (summary.missionContext != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                summary.missionContext!,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              summary.nextAction,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
           const Text(
             'Choose the option that best matches your day.',
             style: TextStyle(
