@@ -1,19 +1,18 @@
 import 'package:future_project/models/wearable_data.dart';
+import 'package:future_project/models/medical_validation.dart';
+import 'package:future_project/services/validation/medical_validation_library.dart';
 
 /// Central conservative sanity and freshness rules for normalized health data.
 /// These checks reject impossible/contextually unusable values; they do not
 /// diagnose health conditions or establish clinical accuracy.
 class WearableValidationService {
-  static const minimumBodyWeightKg = 30.0;
-  static const maximumBodyWeightKg = 350.0;
   static const defaultFreshness = Duration(hours: 36);
+  final MedicalValidationLibrary _medicalValidation;
 
-  const WearableValidationService();
-
-  static bool isPlausibleBodyWeightKg(double value) =>
-      value.isFinite &&
-      value >= minimumBodyWeightKg &&
-      value <= maximumBodyWeightKg;
+  const WearableValidationService({
+    MedicalValidationLibrary medicalValidation =
+        const MedicalValidationLibrary(),
+  }) : _medicalValidation = medicalValidation;
 
   ValidatedWearableData validate(WearableData data, {DateTime? now}) {
     final checkedAt = now ?? DateTime.now();
@@ -53,7 +52,7 @@ class WearableValidationService {
         metric: WearableMetric.steps,
         raw: data.steps,
         unavailableTypes: const {'STEPS'},
-        plausible: (value) => value >= 0 && value <= 100000,
+        plausibility: _medicalValidation.validateSteps,
         now: checkedAt,
       ),
       activeEnergyKilocalories: _metric(
@@ -61,7 +60,7 @@ class WearableValidationService {
         metric: WearableMetric.activeEnergy,
         raw: data.activeEnergyKilocalories,
         unavailableTypes: const {'ACTIVE_ENERGY_BURNED'},
-        plausible: (value) => value.isFinite && value >= 0 && value <= 20000,
+        plausibility: _medicalValidation.validateActiveEnergyKilocalories,
         now: checkedAt,
       ),
       averageHeartRateBpm: _metric(
@@ -69,7 +68,7 @@ class WearableValidationService {
         metric: WearableMetric.heartRate,
         raw: data.averageHeartRateBpm,
         unavailableTypes: const {'HEART_RATE'},
-        plausible: _isPlausibleHeartRate,
+        plausibility: _medicalValidation.validateHeartRateBpm,
         now: checkedAt,
       ),
       restingHeartRateBpm: _metric(
@@ -77,7 +76,8 @@ class WearableValidationService {
         metric: WearableMetric.restingHeartRate,
         raw: data.restingHeartRateBpm,
         unavailableTypes: const {'RESTING_HEART_RATE'},
-        plausible: _isPlausibleHeartRate,
+        plausibility: (value) =>
+            _medicalValidation.validateHeartRateBpm(value, resting: true),
         now: checkedAt,
       ),
       workouts: ValidatedWearableMetric(
@@ -101,7 +101,7 @@ class WearableValidationService {
         metric: WearableMetric.distance,
         raw: data.distanceMeters,
         unavailableTypes: const {'DISTANCE_WALKING_RUNNING'},
-        plausible: (value) => value.isFinite && value >= 0 && value <= 200000,
+        plausibility: _medicalValidation.validateDistanceMeters,
         now: checkedAt,
       ),
       sleepDuration: _metric(
@@ -115,8 +115,7 @@ class WearableValidationService {
           'SLEEP_REM',
         },
         unavailableWhenAny: false,
-        plausible: (value) =>
-            !value.isNegative && value <= const Duration(hours: 24),
+        plausibility: _medicalValidation.validateSleepDuration,
         now: checkedAt,
       ),
       bodyWeightKilograms: _metric(
@@ -124,7 +123,7 @@ class WearableValidationService {
         metric: WearableMetric.bodyWeight,
         raw: data.bodyWeightKilograms,
         unavailableTypes: const {'WEIGHT'},
-        plausible: isPlausibleBodyWeightKg,
+        plausibility: _medicalValidation.validateWeightKilograms,
         now: checkedAt,
       ),
     );
@@ -135,7 +134,7 @@ class WearableValidationService {
     required WearableMetric metric,
     required T? raw,
     required Set<String> unavailableTypes,
-    required bool Function(T) plausible,
+    required MedicalValidationResult<T> Function(T?) plausibility,
     required DateTime now,
     bool unavailableWhenAny = true,
   }) {
@@ -147,7 +146,7 @@ class WearableValidationService {
         ? WearableValidationStatus.unavailable
         : raw == null
         ? WearableValidationStatus.missing
-        : !plausible(raw)
+        : !plausibility(raw).isValid
         ? WearableValidationStatus.implausible
         : _isStale(sourceDate, now)
         ? WearableValidationStatus.stale
@@ -183,16 +182,21 @@ class WearableValidationService {
       sourceDate.isAfter(now.add(const Duration(minutes: 5))) ||
       now.difference(sourceDate) > defaultFreshness;
 
-  bool _isPlausibleHeartRate(double value) =>
-      value.isFinite && value >= 20 && value <= 300;
-
   bool _isPlausibleWorkout(WearableWorkout workout) =>
-      !workout.duration.isNegative &&
-      workout.duration <= const Duration(hours: 24) &&
+      _medicalValidation.validateWorkoutDuration(workout.duration).isValid &&
       !workout.end.isBefore(workout.start) &&
       (workout.distanceMeters == null ||
-          (workout.distanceMeters!.isFinite && workout.distanceMeters! >= 0)) &&
+          _medicalValidation
+              .validateNonNegativeFinite(
+                MedicalMetric.distanceMeters,
+                workout.distanceMeters,
+              )
+              .isValid) &&
       (workout.activeEnergyKilocalories == null ||
-          (workout.activeEnergyKilocalories!.isFinite &&
-              workout.activeEnergyKilocalories! >= 0));
+          _medicalValidation
+              .validateNonNegativeFinite(
+                MedicalMetric.activeEnergyKilocalories,
+                workout.activeEnergyKilocalories,
+              )
+              .isValid);
 }
