@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
+import 'package:future_project/services/health/recovery_context_service.dart';
+import 'package:future_project/services/today_coach_recovery_advisor.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
@@ -36,6 +39,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
 
   String? _smartMorningBrief;
   bool _isMorningBriefLoading = false;
+  final _recoveryService = RecoveryContextService();
+  final _recoveryAdvisor = const TodayCoachRecoveryAdvisor();
+  CoachRecoveryRecommendation? _recoveryRecommendation;
+  String? _lighterTrainingChoice;
 
   bool _isSendingQuestion = false;
   String? _lastQuestion;
@@ -96,6 +103,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _isPriorityLoading = shouldLoadPriority;
         _smartMorningBrief = null;
         _isMorningBriefLoading = shouldLoadPriority;
+        _recoveryRecommendation = null;
+        _lighterTrainingChoice = null;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -105,6 +114,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _loadSmartPriority(),
           _loadSmartMorningBrief(),
           _loadTodayWrapUp(),
+          _loadRecoveryGuidance(row),
         ]);
       }
     } catch (_) {
@@ -118,6 +128,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _isPriorityLoading = false;
         _smartMorningBrief = null;
         _isMorningBriefLoading = false;
+        _recoveryRecommendation = null;
+        _lighterTrainingChoice = null;
         _wrapUpStatus = null;
         _wrapUpNoteController.clear();
         _isWrapUpLoading = false;
@@ -129,6 +141,64 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   }
 
   bool get _foundationCompleted => _foundation?['is_completed'] == true;
+
+  Future<void> _loadRecoveryGuidance(Map<String, dynamic> foundation) async {
+    try {
+      final context = await _recoveryService.load();
+      var isPlannedTrainingDay = false;
+      try {
+        isPlannedTrainingDay = await _hasWorkoutScheduledToday();
+      } catch (_) {
+        // A schedule lookup failure must not suppress available recovery context.
+      }
+      final recommendation = _recoveryAdvisor.recommend(
+        CoachRecoveryInput(
+          recoveryContext: context,
+          isPlannedTrainingDay: isPlannedTrainingDay,
+          selfReportedFatigue: _hasSelfReportedFatigue(foundation),
+          selfReportedPain: _hasSelfReportedPain(foundation),
+        ),
+      );
+      if (mounted) {
+        setState(() => _recoveryRecommendation = recommendation);
+      }
+    } catch (_) {
+      // Wearable context is optional. Existing Coach behavior remains intact.
+    }
+  }
+
+  Future<bool> _hasWorkoutScheduledToday() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) return false;
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+    final rows = await supabase
+        .from('workout_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('scheduled_at', start.toUtc().toIso8601String())
+        .lt('scheduled_at', end.toUtc().toIso8601String())
+        .limit(1);
+    return rows.isNotEmpty;
+  }
+
+  bool _hasSelfReportedFatigue(Map<String, dynamic> foundation) {
+    final lifestyle = _asMap(foundation['lifestyle']);
+    return _containsContextText(lifestyle, const [
+      'low energy',
+      'fatigue',
+      'exhausted',
+    ]);
+  }
+
+  bool _hasSelfReportedPain(Map<String, dynamic> foundation) {
+    final value = foundation['pain_notes']?.toString().trim().toLowerCase();
+    return value != null &&
+        value.isNotEmpty &&
+        !const {'none', 'no pain', 'not set', '0'}.contains(value);
+  }
 
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
@@ -865,6 +935,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _buildHeader(),
           const SizedBox(height: 22),
           _buildMorningBrief(),
+          if (_recoveryRecommendation?.shouldSurface == true) ...[
+            const SizedBox(height: 18),
+            _buildRecoveryGuidance(),
+          ],
           if (_todayState!.reminder != null) ...[
             const SizedBox(height: 18),
             _buildReminderCard(),
@@ -1027,6 +1101,72 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
               ),
             ),
     );
+  }
+
+  Widget _buildRecoveryGuidance() {
+    final recommendation = _recoveryRecommendation!;
+    return _CoachCard(
+      icon: Icons.self_improvement_outlined,
+      title: 'Recovery context',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            recommendation.message!,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.55,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          if (recommendation.offersLighterTraining) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _chooseTrainingApproach,
+              child: const Text('Review today’s options'),
+            ),
+          ],
+          if (_lighterTrainingChoice != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _lighterTrainingChoice!,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _chooseTrainingApproach() async {
+    final trainLighter = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose today’s approach'),
+        content: const Text(
+          'This choice does not change your Training Plan. Decide based on how you feel and keep the session within your control.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep planned session'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('I’ll train lighter'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || trainLighter == null) return;
+    setState(() {
+      _lighterTrainingChoice = trainLighter
+          ? 'You chose a lighter approach for today. Your Training Plan was not changed.'
+          : 'You chose to keep your planned session. Adjust based on how you feel.';
+    });
   }
 
   Widget _buildPriorityCard() {
