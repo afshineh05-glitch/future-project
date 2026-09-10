@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/coach_recovery_recommendation.dart';
+import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
+import 'package:future_project/services/coach_daily_decision_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/today_coach_recovery_advisor.dart';
 
@@ -41,8 +43,11 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   bool _isMorningBriefLoading = false;
   final _recoveryService = RecoveryContextService();
   final _recoveryAdvisor = const TodayCoachRecoveryAdvisor();
+  final _decisionService = CoachDailyDecisionService();
   CoachRecoveryRecommendation? _recoveryRecommendation;
-  String? _lighterTrainingChoice;
+  CoachDecision? _trainingChoice;
+  bool _isDecisionSaving = false;
+  bool _decisionSaveFailed = false;
 
   bool _isSendingQuestion = false;
   String? _lastQuestion;
@@ -104,7 +109,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = shouldLoadPriority;
         _recoveryRecommendation = null;
-        _lighterTrainingChoice = null;
+        _trainingChoice = null;
+        _decisionSaveFailed = false;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -115,6 +121,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _loadSmartMorningBrief(),
           _loadTodayWrapUp(),
           _loadRecoveryGuidance(row),
+          _loadCoachDecision(),
         ]);
       }
     } catch (_) {
@@ -129,7 +136,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = false;
         _recoveryRecommendation = null;
-        _lighterTrainingChoice = null;
+        _trainingChoice = null;
+        _decisionSaveFailed = false;
         _wrapUpStatus = null;
         _wrapUpNoteController.clear();
         _isWrapUpLoading = false;
@@ -141,6 +149,17 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   }
 
   bool get _foundationCompleted => _foundation?['is_completed'] == true;
+
+  Future<void> _loadCoachDecision() async {
+    try {
+      final saved = await _decisionService.loadToday();
+      if (mounted && saved != null) {
+        setState(() => _trainingChoice = saved.decision);
+      }
+    } catch (_) {
+      // Decision context is optional; Coach guidance must continue to load.
+    }
+  }
 
   Future<void> _loadRecoveryGuidance(Map<String, dynamic> foundation) async {
     try {
@@ -1122,18 +1141,27 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           if (recommendation.offersLighterTraining) ...[
             const SizedBox(height: 12),
             OutlinedButton(
-              onPressed: _chooseTrainingApproach,
+              onPressed: _isDecisionSaving ? null : _chooseTrainingApproach,
               child: const Text('Review today’s options'),
             ),
           ],
-          if (_lighterTrainingChoice != null) ...[
+          if (_trainingChoice != null) ...[
             const SizedBox(height: 8),
             Text(
-              _lighterTrainingChoice!,
+              _trainingChoice == CoachDecision.lighterSession
+                  ? 'You chose a lighter approach for today. Your Training Plan was not changed.'
+                  : 'You chose to keep your planned session. Adjust based on how you feel.',
               style: const TextStyle(
                 fontSize: 13,
                 color: AppTheme.textSecondary,
               ),
+            ),
+          ],
+          if (_decisionSaveFailed) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Could not save this choice. It will remain selected for this session.',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ],
@@ -1162,11 +1190,21 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
       ),
     );
     if (!mounted || trainLighter == null) return;
+    final choice = trainLighter
+        ? CoachDecision.lighterSession
+        : CoachDecision.plannedSession;
     setState(() {
-      _lighterTrainingChoice = trainLighter
-          ? 'You chose a lighter approach for today. Your Training Plan was not changed.'
-          : 'You chose to keep your planned session. Adjust based on how you feel.';
+      _trainingChoice = choice;
+      _isDecisionSaving = true;
+      _decisionSaveFailed = false;
     });
+    try {
+      await _decisionService.saveToday(choice);
+    } catch (_) {
+      if (mounted) setState(() => _decisionSaveFailed = true);
+    } finally {
+      if (mounted) setState(() => _isDecisionSaving = false);
+    }
   }
 
   Widget _buildPriorityCard() {
