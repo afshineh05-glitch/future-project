@@ -41,6 +41,9 @@ class ValidatedWearableMetric<T> {
 
   bool get isSentToProgressEngine =>
       status == WearableValidationStatus.valid && value != null;
+
+  bool get isEligibleForPersistence =>
+      status == WearableValidationStatus.valid && value != null;
 }
 
 class WearablePermissionResult {

@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:future_project/models/wearable_data.dart';
+import 'package:future_project/models/wearable_history.dart';
 import 'package:future_project/services/health/apple_health_service.dart';
+import 'package:future_project/services/health/wearable_sync_service.dart';
 import 'package:future_project/services/health/wearable_validation_service.dart';
 
 class WearableDebugScreen extends StatefulWidget {
@@ -14,9 +16,12 @@ class WearableDebugScreen extends StatefulWidget {
 class _WearableDebugScreenState extends State<WearableDebugScreen> {
   final _service = AppleHealthService();
   final _validator = const WearableValidationService();
+  final _syncService = WearableSyncService();
   WearablePermissionResult? _permission;
   WearableData? _data;
   ValidatedWearableData? _validated;
+  WearableSyncResult? _syncResult;
+  WearableDailyRecord? _latestRecord;
   bool _busy = false;
   String? _error;
 
@@ -65,6 +70,30 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
     }
   }
 
+  Future<void> _sync() async {
+    final validated = _validated;
+    if (validated == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await _syncService.sync(validated);
+    WearableDailyRecord? latest;
+    if (result.isSuccess) {
+      try {
+        latest = await _syncService.loadLatest();
+      } catch (_) {
+        latest = result.record;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _syncResult = result;
+      _latestRecord = latest ?? _latestRecord;
+      _busy = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) return const SizedBox.shrink();
@@ -90,8 +119,25 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
                 onPressed: _busy ? null : _readToday,
                 child: const Text("Read today's metrics"),
               ),
+              OutlinedButton(
+                onPressed: _busy || _validated == null ? null : _sync,
+                child: const Text('Sync validated data'),
+              ),
             ],
           ),
+          if (_syncResult != null) ...[
+            const SizedBox(height: 12),
+            Text('Sync status: ${_syncResult!.status.name}'),
+            if (_syncResult!.message != null) Text(_syncResult!.message!),
+          ],
+          if (_latestRecord != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Supabase daily record: ${_latestRecord!.localDateKey}\n'
+              'Last successful sync: '
+              '${_latestRecord!.syncedAt?.toLocal().toIso8601String() ?? 'unknown'}',
+            ),
+          ],
           if (_busy) ...[
             const SizedBox(height: 18),
             const LinearProgressIndicator(),
