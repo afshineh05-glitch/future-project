@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
+import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
 import 'package:future_project/services/coach_daily_decision_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/today_coach_recovery_advisor.dart';
+import 'package:future_project/services/today_weekly_mission_advisor.dart';
+import 'package:future_project/services/weekly_coach_service.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
@@ -44,7 +47,11 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   final _recoveryService = RecoveryContextService();
   final _recoveryAdvisor = const TodayCoachRecoveryAdvisor();
   final _decisionService = CoachDailyDecisionService();
+  final _weeklyCoachService = WeeklyCoachService();
+  final _weeklyMissionAdvisor = const TodayWeeklyMissionAdvisor();
   CoachRecoveryRecommendation? _recoveryRecommendation;
+  WeeklyCoachPlan? _weeklyPlan;
+  bool _isPlannedTrainingDay = false;
   CoachDecision? _trainingChoice;
   bool _isDecisionSaving = false;
   bool _decisionSaveFailed = false;
@@ -109,6 +116,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = shouldLoadPriority;
         _recoveryRecommendation = null;
+        _weeklyPlan = null;
+        _isPlannedTrainingDay = false;
         _trainingChoice = null;
         _decisionSaveFailed = false;
         _isLoading = false;
@@ -122,6 +131,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _loadTodayWrapUp(),
           _loadRecoveryGuidance(row),
           _loadCoachDecision(),
+          _loadWeeklyMission(),
         ]);
       }
     } catch (_) {
@@ -136,6 +146,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _smartMorningBrief = null;
         _isMorningBriefLoading = false;
         _recoveryRecommendation = null;
+        _weeklyPlan = null;
+        _isPlannedTrainingDay = false;
         _trainingChoice = null;
         _decisionSaveFailed = false;
         _wrapUpStatus = null;
@@ -161,12 +173,34 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
     }
   }
 
+  Future<void> _loadWeeklyMission() async {
+    final plan = await TodayWeeklyMissionLoader(
+      _weeklyCoachService.loadCurrentPlan,
+    ).loadSafely();
+    if (plan == null) return;
+    var isPlannedTrainingDay = false;
+    try {
+      isPlannedTrainingDay = await _hasWorkoutScheduledToday();
+    } catch (_) {
+      // Schedule context is optional. Never invent a workout.
+    }
+    if (mounted) {
+      setState(() {
+        _weeklyPlan = plan;
+        _isPlannedTrainingDay = isPlannedTrainingDay;
+      });
+    }
+  }
+
   Future<void> _loadRecoveryGuidance(Map<String, dynamic> foundation) async {
     try {
       final context = await _recoveryService.load();
       var isPlannedTrainingDay = false;
       try {
         isPlannedTrainingDay = await _hasWorkoutScheduledToday();
+        if (mounted) {
+          setState(() => _isPlannedTrainingDay = isPlannedTrainingDay);
+        }
       } catch (_) {
         // A schedule lookup failure must not suppress available recovery context.
       }
@@ -958,6 +992,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
             const SizedBox(height: 18),
             _buildRecoveryGuidance(),
           ],
+          if (_weeklyPlan != null) ...[
+            const SizedBox(height: 18),
+            _buildWeeklyMission(),
+          ],
           if (_todayState!.reminder != null) ...[
             const SizedBox(height: 18),
             _buildReminderCard(),
@@ -1162,6 +1200,46 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
             const Text(
               'Could not save this choice. It will remain selected for this session.',
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyMission() {
+    final foundation = _foundation ?? const <String, dynamic>{};
+    final guidance = _weeklyMissionAdvisor.advise(
+      plan: _weeklyPlan,
+      isPlannedTrainingDay: _isPlannedTrainingDay,
+      recoveryRecommendation: _recoveryRecommendation,
+      dailyDecision: _trainingChoice,
+      selfReportedFatigue: _hasSelfReportedFatigue(foundation),
+      selfReportedPain: _hasSelfReportedPain(foundation),
+    )!;
+    return _CoachCard(
+      icon: Icons.flag_outlined,
+      title: 'This week',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            guidance.missionTitle,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          if (guidance.todayFocus != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Today’s focus: ${guidance.todayFocus}',
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ],
         ],
