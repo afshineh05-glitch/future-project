@@ -8,6 +8,7 @@ import 'package:future_project/screens/journey_screen.dart';
 import 'package:future_project/screens/vision_screen.dart';
 import 'package:future_project/screens/welcome_screen.dart';
 import 'package:future_project/screens/wearable_debug_screen.dart';
+import 'package:future_project/screens/wearables_hub_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/dashboard_card.dart';
 
@@ -182,6 +183,22 @@ class DashboardScreen extends StatelessWidget {
                   builder: (_) =>
                       const IntelligentCoachScreen(),
                 ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 18),
+
+          DashboardCard(
+            icon: Icons.watch_outlined,
+            title: 'Wearables',
+            subtitle: 'Health data in personal context',
+            backgroundColor: AppTheme.visionCard,
+            iconColor: AppTheme.primaryGreen,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WearablesHubScreen()),
               );
             },
           ),
