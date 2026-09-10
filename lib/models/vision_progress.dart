@@ -1,3 +1,5 @@
+import 'package:future_project/models/wearable_data.dart';
+
 enum VisionProgressStatus {
   starting,
   building,
@@ -119,6 +121,10 @@ class VisionProgressInput {
   final List<VisionBodyProgressCheck> bodyProgressChecks;
   final List<VisionTrainingSession> trainingSessions;
   final VisionWearableSignal? wearable;
+
+  /// Validated metric-level context. The engine intentionally does not score
+  /// this in Phase 2; [wearable] remains the pre-existing scoring contract.
+  final ValidatedWearableData? wearableContext;
   final int nutritionLogCount;
   final List<DateTime> nutritionActiveDates;
   final DateTime now;
@@ -128,6 +134,7 @@ class VisionProgressInput {
     this.bodyProgressChecks = const [],
     this.trainingSessions = const [],
     this.wearable,
+    this.wearableContext,
     this.nutritionLogCount = 0,
     this.nutritionActiveDates = const [],
     required this.now,

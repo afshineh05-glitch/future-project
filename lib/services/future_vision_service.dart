@@ -1,6 +1,7 @@
 import 'package:future_project/models/body_progress.dart';
 import 'package:future_project/models/future_vision.dart';
 import 'package:future_project/models/vision_progress.dart';
+import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/vision_intelligence.dart';
 import 'package:future_project/models/vision_milestones.dart';
 import 'package:future_project/services/body_progress_service.dart';
@@ -17,6 +18,7 @@ class FutureVisionService {
   final BodyProgressService _bodyProgressService;
   final VisionBodyProgressEngine _bodyProgressEngine;
   final VisionIntelligenceEngine _intelligenceEngine;
+  final ValidatedWearableData? _wearableContext;
 
   FutureVisionService({
     SupabaseClient? supabase,
@@ -27,6 +29,7 @@ class FutureVisionService {
         const VisionBodyProgressEngine(),
     VisionIntelligenceEngine intelligenceEngine =
         const VisionIntelligenceEngine(),
+    ValidatedWearableData? wearableContext,
   }) : _supabase = supabase ?? Supabase.instance.client,
        _progressEngine = progressEngine,
        _milestonesEngine = milestonesEngine,
@@ -34,7 +37,8 @@ class FutureVisionService {
            bodyProgressService ??
            BodyProgressService(supabase: supabase ?? Supabase.instance.client),
        _bodyProgressEngine = bodyProgressEngine,
-       _intelligenceEngine = intelligenceEngine;
+       _intelligenceEngine = intelligenceEngine,
+       _wearableContext = wearableContext;
 
   Future<FutureVisionState> load() async {
     final user = _requireUser();
@@ -154,6 +158,7 @@ class FutureVisionService {
       bodyProgressChecks: bodyProgressChecks,
       trainingSessions: _trainingSessions(workoutRows),
       wearable: null,
+      wearableContext: _wearableContext,
       nutritionLogCount: nutritionRows.length,
       nutritionActiveDates: nutritionDates,
       now: today,

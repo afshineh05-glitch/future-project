@@ -6,6 +6,43 @@ enum WearablePermissionStatus {
   unsupportedPlatform,
 }
 
+enum WearableMetric {
+  steps,
+  activeEnergy,
+  heartRate,
+  restingHeartRate,
+  workouts,
+  workoutDuration,
+  distance,
+  sleepDuration,
+  bodyWeight,
+}
+
+enum WearableValidationStatus {
+  valid,
+  missing,
+  stale,
+  implausible,
+  unavailable,
+}
+
+class ValidatedWearableMetric<T> {
+  final T? rawValue;
+  final T? value;
+  final DateTime? sourceDate;
+  final WearableValidationStatus status;
+
+  const ValidatedWearableMetric({
+    required this.rawValue,
+    required this.value,
+    required this.sourceDate,
+    required this.status,
+  });
+
+  bool get isSentToProgressEngine =>
+      status == WearableValidationStatus.valid && value != null;
+}
+
 class WearablePermissionResult {
   final WearablePermissionStatus status;
   final String? message;
@@ -46,6 +83,7 @@ class WearableData {
   final double? bodyWeightKilograms;
   final List<WearableWorkout> workouts;
   final Set<String> unavailableMetrics;
+  final Map<WearableMetric, DateTime> sourceDates;
 
   const WearableData({
     required this.rangeStart,
@@ -53,6 +91,7 @@ class WearableData {
     required this.permissionStatus,
     required this.workouts,
     required this.unavailableMetrics,
+    this.sourceDates = const {},
     this.steps,
     this.activeEnergyKilocalories,
     this.averageHeartRateBpm,
@@ -61,4 +100,48 @@ class WearableData {
     this.sleepDuration,
     this.bodyWeightKilograms,
   });
+}
+
+class ValidatedWearableData {
+  final DateTime rangeStart;
+  final DateTime rangeEnd;
+  final WearablePermissionStatus permissionStatus;
+  final Set<String> unavailableMetrics;
+  final ValidatedWearableMetric<int> steps;
+  final ValidatedWearableMetric<double> activeEnergyKilocalories;
+  final ValidatedWearableMetric<double> averageHeartRateBpm;
+  final ValidatedWearableMetric<double> restingHeartRateBpm;
+  final ValidatedWearableMetric<List<WearableWorkout>> workouts;
+  final ValidatedWearableMetric<Duration> workoutDuration;
+  final ValidatedWearableMetric<double> distanceMeters;
+  final ValidatedWearableMetric<Duration> sleepDuration;
+  final ValidatedWearableMetric<double> bodyWeightKilograms;
+
+  const ValidatedWearableData({
+    required this.rangeStart,
+    required this.rangeEnd,
+    required this.permissionStatus,
+    required this.unavailableMetrics,
+    required this.steps,
+    required this.activeEnergyKilocalories,
+    required this.averageHeartRateBpm,
+    required this.restingHeartRateBpm,
+    required this.workouts,
+    required this.workoutDuration,
+    required this.distanceMeters,
+    required this.sleepDuration,
+    required this.bodyWeightKilograms,
+  });
+
+  int get validMetricCount => [
+    steps,
+    activeEnergyKilocalories,
+    averageHeartRateBpm,
+    restingHeartRateBpm,
+    workouts,
+    workoutDuration,
+    distanceMeters,
+    sleepDuration,
+    bodyWeightKilograms,
+  ].where((metric) => metric.isSentToProgressEngine).length;
 }

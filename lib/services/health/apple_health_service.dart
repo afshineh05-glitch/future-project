@@ -82,6 +82,7 @@ class AppleHealthService implements WearableService {
       bodyWeightKilograms: _latest(data, HealthDataType.WEIGHT),
       workouts: workouts,
       unavailableMetrics: unavailable,
+      sourceDates: _sourceDates(data, workouts),
     );
   }
 
@@ -109,6 +110,49 @@ class AppleHealthService implements WearableService {
       ..sort((a, b) => b.dateTo.compareTo(a.dateTo));
     if (matching.isEmpty) return null;
     return _numericValue(matching.first);
+  }
+
+  DateTime? _latestDate(List<HealthDataPoint> points, HealthDataType type) {
+    final matching = points.where((point) => point.type == type).toList()
+      ..sort((a, b) => b.dateTo.compareTo(a.dateTo));
+    return matching.firstOrNull?.dateTo;
+  }
+
+  DateTime? _latestSleepDate(List<HealthDataPoint> points) {
+    final matching =
+        points.where((point) => _sleepTypes.contains(point.type)).toList()
+          ..sort((a, b) => b.dateTo.compareTo(a.dateTo));
+    return matching.firstOrNull?.dateTo;
+  }
+
+  Map<WearableMetric, DateTime> _sourceDates(
+    List<HealthDataPoint> data,
+    List<WearableWorkout> workouts,
+  ) {
+    final dates = <WearableMetric, DateTime>{};
+    void add(WearableMetric metric, DateTime? date) {
+      if (date != null) dates[metric] = date;
+    }
+
+    add(WearableMetric.steps, _latestDate(data, HealthDataType.STEPS));
+    add(
+      WearableMetric.activeEnergy,
+      _latestDate(data, HealthDataType.ACTIVE_ENERGY_BURNED),
+    );
+    add(WearableMetric.heartRate, _latestDate(data, HealthDataType.HEART_RATE));
+    add(
+      WearableMetric.restingHeartRate,
+      _latestDate(data, HealthDataType.RESTING_HEART_RATE),
+    );
+    add(WearableMetric.workouts, workouts.firstOrNull?.end);
+    add(WearableMetric.workoutDuration, workouts.firstOrNull?.end);
+    add(
+      WearableMetric.distance,
+      _latestDate(data, HealthDataType.DISTANCE_WALKING_RUNNING),
+    );
+    add(WearableMetric.sleepDuration, _latestSleepDate(data));
+    add(WearableMetric.bodyWeight, _latestDate(data, HealthDataType.WEIGHT));
+    return dates;
   }
 
   List<double> _numeric(List<HealthDataPoint> points, HealthDataType type) =>
