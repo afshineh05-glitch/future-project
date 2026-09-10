@@ -117,7 +117,7 @@ void main() {
     )!;
     expect(result.progressRecognition, contains('lighter-session choice'));
     expect(result.progressRecognition, isNot(contains('full')));
-    expect(result.nextAction, isNot(contains('intensity')));
+    expect(result.nextAction, contains('without returning'));
   });
 
   test('plannedSession does not increase intensity', () {
@@ -132,7 +132,8 @@ void main() {
       result.progressRecognition,
       'You completed a recorded workout today.',
     );
-    expect(result.nextAction, contains('without adding extra work'));
+    expect(result.nextAction, contains('without adding intensity'));
+    expect(result.nextAction, contains('extra work'));
   });
 
   test('recovery caution takes precedence over consistency', () {

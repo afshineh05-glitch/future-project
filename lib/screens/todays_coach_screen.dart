@@ -4,6 +4,7 @@ import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/end_of_day_coach_summary.dart';
 import 'package:future_project/models/recovery_context.dart';
+import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
 import 'package:future_project/services/coach_daily_decision_service.dart';
@@ -11,6 +12,7 @@ import 'package:future_project/services/end_of_day_coach_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/today_coach_recovery_advisor.dart';
 import 'package:future_project/services/today_weekly_mission_advisor.dart';
+import 'package:future_project/services/unified_coach_context_engine.dart';
 import 'package:future_project/services/weekly_coach_service.dart';
 
 import 'package:future_project/screens/my_foundation_screen.dart';
@@ -54,6 +56,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   final _weeklyMissionAdvisor = const TodayWeeklyMissionAdvisor();
   final _endOfDayService = EndOfDayCoachService();
   final _endOfDayEngine = const EndOfDayCoachEngine();
+  final _unifiedCoachEngine = const UnifiedCoachContextEngine();
   CoachRecoveryRecommendation? _recoveryRecommendation;
   RecoveryContext? _recoveryContext;
   EndOfDayObservation _endOfDayObservation = const EndOfDayObservation();
@@ -1236,10 +1239,11 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
     final guidance = _weeklyMissionAdvisor.advise(
       plan: _weeklyPlan,
       isPlannedTrainingDay: _isPlannedTrainingDay,
-      recoveryRecommendation: _recoveryRecommendation,
+      recoveryContext: _recoveryContext,
       dailyDecision: _trainingChoice,
       selfReportedFatigue: _hasSelfReportedFatigue(foundation),
       selfReportedPain: _hasSelfReportedPain(foundation),
+      unifiedContext: _unifiedCoachContext(),
     )!;
     return _CoachCard(
       icon: Icons.flag_outlined,
@@ -1507,6 +1511,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         observation: _endOfDayObservation,
         selfReportedPain: _hasSelfReportedPain(foundation),
         selfReportedFatigue: _hasSelfReportedFatigue(foundation),
+        unifiedContext: _unifiedCoachContext(),
       ),
     );
     return _CoachCard(
@@ -1647,6 +1652,22 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  UnifiedCoachContext _unifiedCoachContext() {
+    final foundation = _foundation ?? const <String, dynamic>{};
+    return _unifiedCoachEngine.evaluate(
+      UnifiedCoachContextInput(
+        now: DateTime.now(),
+        recoveryContext: _recoveryContext,
+        weeklyPlan: _weeklyPlan,
+        dailyDecision: _trainingChoice,
+        userReportedPainOrFatigue:
+            _hasSelfReportedPain(foundation) ||
+            _hasSelfReportedFatigue(foundation),
+        isPlannedTrainingDay: _isPlannedTrainingDay,
       ),
     );
   }

@@ -1,8 +1,10 @@
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/end_of_day_coach_summary.dart';
 import 'package:future_project/models/recovery_context.dart';
+import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/wearable_history.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
+import 'package:future_project/services/unified_coach_context_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EndOfDayObservation {
@@ -69,6 +71,7 @@ class EndOfDayCoachInput {
   final EndOfDayObservation observation;
   final bool selfReportedPain;
   final bool selfReportedFatigue;
+  final UnifiedCoachContext? unifiedContext;
 
   const EndOfDayCoachInput({
     required this.now,
@@ -78,6 +81,7 @@ class EndOfDayCoachInput {
     this.observation = const EndOfDayObservation(),
     this.selfReportedPain = false,
     this.selfReportedFatigue = false,
+    this.unifiedContext,
   });
 }
 
@@ -85,9 +89,22 @@ class EndOfDayCoachEngine {
   const EndOfDayCoachEngine();
 
   EndOfDayCoachSummary? evaluate(EndOfDayCoachInput input) {
-    final hasCondition = input.selfReportedPain || input.selfReportedFatigue;
+    final unified =
+        input.unifiedContext ??
+        const UnifiedCoachContextEngine().evaluate(
+          UnifiedCoachContextInput(
+            now: input.now,
+            recoveryContext: input.recoveryContext,
+            weeklyPlan: input.weeklyPlan,
+            dailyDecision: input.dailyDecision,
+            userReportedPainOrFatigue:
+                input.selfReportedPain || input.selfReportedFatigue,
+          ),
+        );
+    final hasCondition =
+        unified.primaryState == UnifiedCoachPrimaryState.userCondition;
     final recoveryCaution =
-        input.recoveryContext?.overallState == RecoveryContextState.caution;
+        unified.primaryState == UnifiedCoachPrimaryState.recovery;
     final lighter = input.dailyDecision == CoachDecision.lighterSession;
     final completed = input.observation.workoutCompleted == true;
     final coverage = EndOfDayDataCoverage(
@@ -119,7 +136,7 @@ class EndOfDayCoachEngine {
           : 'Your reported pain or fatigue is the most important context available tonight.';
       observation =
           'Recovery and your own condition take priority over training consistency.';
-      next = 'Tonight: keep recovery within your normal comfortable routine.';
+      next = unified.primaryAction;
     } else if (recoveryCaution) {
       headline = 'Protect recovery tonight';
       recognition = lighter
@@ -128,20 +145,20 @@ class EndOfDayCoachEngine {
           ? 'You recorded today’s completed workout; recovery context now supports an easier close to the day.'
           : 'Today’s recovery context supports a lower-demand close to the day.';
       observation = 'Available recovery signals call for caution tonight.';
-      next = _recoveryAction(input.weeklyPlan);
+      next = unified.primaryAction;
     } else if (lighter) {
       headline = 'You kept today within control';
       recognition =
           'You followed through on your recorded lighter-session choice.';
       observation =
           'The lighter decision is the clearest recorded action from today.';
-      next = _safeNextAction(input.weeklyPlan);
+      next = unified.primaryAction;
     } else if (completed) {
       headline = 'Today’s planned work is complete';
       recognition = 'You completed a recorded workout today.';
       observation =
           'The completed session is today’s clearest progress evidence.';
-      next = _safeNextAction(input.weeklyPlan);
+      next = unified.primaryAction;
     } else {
       headline = 'Keep tonight simple';
       recognition =
@@ -149,7 +166,7 @@ class EndOfDayCoachEngine {
       observation = input.observation.workoutCompleted == false
           ? 'No completed app workout was recorded today.'
           : 'Workout data was unavailable, so no workout outcome is assumed.';
-      next = _safeNextAction(input.weeklyPlan);
+      next = unified.primaryAction;
     }
 
     return EndOfDayCoachSummary(
@@ -175,40 +192,6 @@ class EndOfDayCoachEngine {
       return 'Today’s completed session kept the weekly consistency path moving.';
     }
     return 'Tonight’s next action stays connected to the current weekly path.';
-  }
-
-  String _recoveryAction(WeeklyCoachPlan? plan) {
-    final action = _matchingAction(plan, const [
-      'sleep',
-      'bedtime',
-      'wind-down',
-      'recovery',
-    ]);
-    return action == null
-        ? 'Tonight: protect your normal recovery routine.'
-        : 'Tonight: $action';
-  }
-
-  String _safeNextAction(WeeklyCoachPlan? plan) {
-    final action = _matchingAction(plan, const [
-      'sleep',
-      'bedtime',
-      'wind-down',
-      'record',
-      'lower-load',
-    ]);
-    return action == null
-        ? 'Tomorrow: return to your existing plan without adding extra work.'
-        : 'Next: $action';
-  }
-
-  String? _matchingAction(WeeklyCoachPlan? plan, List<String> terms) {
-    if (plan == null) return null;
-    for (final action in plan.actionItems) {
-      final normalized = action.toLowerCase();
-      if (terms.any(normalized.contains)) return action;
-    }
-    return null;
   }
 }
 

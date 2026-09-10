@@ -1,5 +1,6 @@
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/recovery_context.dart';
+import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/wearable_history.dart';
 import 'package:future_project/models/wearables_hub.dart';
@@ -11,6 +12,7 @@ import 'package:future_project/services/health/wearable_service.dart';
 import 'package:future_project/services/health/wearable_sync_service.dart';
 import 'package:future_project/services/health/wearable_validation_service.dart';
 import 'package:future_project/services/weekly_coach_service.dart';
+import 'package:future_project/services/unified_coach_context_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 abstract interface class WearablesHubHistorySource {
@@ -62,7 +64,11 @@ class SupabaseWearablesHubHistorySource implements WearablesHubHistorySource {
 }
 
 class WearablesHubEngine {
-  const WearablesHubEngine();
+  final UnifiedCoachContextEngine _unifiedCoach;
+
+  const WearablesHubEngine({
+    UnifiedCoachContextEngine unifiedCoach = const UnifiedCoachContextEngine(),
+  }) : _unifiedCoach = unifiedCoach;
 
   WearablesHubData build({
     required ConnectedHealthSource source,
@@ -92,6 +98,31 @@ class WearablesHubEngine {
         'bpm',
       ),
     ];
+    final wearableTrend = trends
+        .where(
+          (trend) => trend.direction != WearableTrendDirection.insufficientData,
+        )
+        .firstOrNull;
+    final UnifiedCoachContext unified = _unifiedCoach.evaluate(
+      UnifiedCoachContextInput(
+        now: now,
+        recoveryContext: recoveryContext,
+        weeklyPlan: weeklyPlan,
+        dailyDecision: dailyDecision,
+        userReportedPainOrFatigue: selfReportedPainOrFatigue,
+        wearableInsight: wearableTrend == null
+            ? null
+            : '${wearableTrend.metric}: ${wearableTrend.description}',
+        wearableAction: wearableTrend == null
+            ? null
+            : 'Keep your existing routine while another validated day builds the pattern.',
+        wearableEvidence: wearableTrend == null
+            ? const []
+            : [
+                'wearable_${wearableTrend.metric.toLowerCase().replaceAll(' ', '_')}_trend',
+              ],
+      ),
+    );
     return WearablesHubData(
       source: source,
       today: today,
@@ -100,12 +131,12 @@ class WearablesHubEngine {
       weeklyPlan: weeklyPlan,
       dailyDecision: dailyDecision,
       trends: List.unmodifiable(trends),
-      coachInsight: _insight(
-        recoveryContext: recoveryContext,
-        weeklyPlan: weeklyPlan,
-        dailyDecision: dailyDecision,
-        selfReportedPainOrFatigue: selfReportedPainOrFatigue,
+      coachInsight: WearablesCoachInsight(
+        insight: unified.primaryInsight,
+        nextAction: unified.primaryAction,
+        evidence: unified.evidence,
       ),
+      unifiedCoachContext: unified,
       selfReportedPainOrFatigue: selfReportedPainOrFatigue,
       generatedAt: now,
     );
@@ -144,60 +175,6 @@ class WearablesHubEngine {
           ? 'Fairly steady across ${values.length} available days.'
           : '${delta.abs().round()} $unit ${direction == WearableTrendDirection.increasing ? 'higher' : 'lower'} across the available week.',
     );
-  }
-
-  WearablesCoachInsight? _insight({
-    RecoveryContext? recoveryContext,
-    WeeklyCoachPlan? weeklyPlan,
-    CoachDecision? dailyDecision,
-    required bool selfReportedPainOrFatigue,
-  }) {
-    if (selfReportedPainOrFatigue) {
-      return const WearablesCoachInsight(
-        insight: 'How you feel matters more than wearable trends today.',
-        nextAction:
-            'Keep today’s effort within your current comfort and energy.',
-        evidence: ['user_reported_condition'],
-      );
-    }
-    if (recoveryContext?.overallState == RecoveryContextState.caution) {
-      return const WearablesCoachInsight(
-        insight:
-            'Your validated recovery context deserves more attention today.',
-        nextAction: 'Protect your normal sleep and recovery routine tonight.',
-        evidence: ['recovery_caution'],
-      );
-    }
-    if (dailyDecision == CoachDecision.lighterSession) {
-      return const WearablesCoachInsight(
-        insight:
-            'Your lighter-session choice is the clearest coaching context for today.',
-        nextAction:
-            'Keep the lighter approach without returning to full planned intensity.',
-        evidence: ['lighter_session_decision'],
-      );
-    }
-    if (weeklyPlan != null) {
-      final action = weeklyPlan.actionItems.firstOrNull;
-      return WearablesCoachInsight(
-        insight:
-            'Today’s wearable context should support—not replace—your current weekly mission.',
-        nextAction:
-            action ??
-            'Continue your existing weekly direction without adding extra work.',
-        evidence: ['weekly_mission'],
-      );
-    }
-    if (recoveryContext?.overallState == RecoveryContextState.favorable) {
-      return const WearablesCoachInsight(
-        insight:
-            'Your available recovery context looks steady relative to your own baseline.',
-        nextAction:
-            'Continue your existing plan without adding extra intensity.',
-        evidence: ['favorable_recovery'],
-      );
-    }
-    return null;
   }
 
   double _average(Iterable<double> values) {

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
-import 'package:future_project/models/coach_recovery_recommendation.dart';
+import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/today_weekly_mission_advisor.dart';
 
@@ -34,12 +34,22 @@ WeeklyCoachPlan plan(
   generatedAt: DateTime(2026, 9, 14),
 );
 
-const caution = CoachRecoveryRecommendation(
-  type: CoachRecoveryRecommendationType.considerLighterTraining,
-  message: 'Recovery caution.',
-  offersLighterTraining: true,
-  requiresExplicitUserAction: true,
-  evidence: [],
+UnifiedCoachContext context(String action) => UnifiedCoachContext(
+  localDate: DateTime(2026, 9, 14),
+  primaryState: UnifiedCoachPrimaryState.recovery,
+  primaryPriority: UnifiedCoachPriority.protectRecovery,
+  primaryInsight: 'Shared insight',
+  primaryAction: action,
+  userConditionContext: false,
+  evidence: const ['shared'],
+  dataCoverage: const UnifiedCoachDataCoverage(
+    userConditionAvailable: false,
+    recoveryAvailable: true,
+    dailyDecisionAvailable: false,
+    weeklyMissionAvailable: true,
+    wearableContextAvailable: false,
+  ),
+  generatedAt: DateTime(2026, 9, 14),
 );
 
 void main() {
@@ -97,7 +107,7 @@ void main() {
       plan: plan(WeeklyMissionType.improveWorkoutConsistency),
       isPlannedTrainingDay: false,
     )!;
-    expect(result.todayFocus, isNull);
+    expect(result.todayFocus, contains('without inventing a workout'));
     expect(result.missionTitle, 'Authoritative weekly mission');
   });
 
@@ -105,10 +115,10 @@ void main() {
     final result = advisor.advise(
       plan: plan(WeeklyMissionType.improveWorkoutConsistency),
       isPlannedTrainingDay: true,
-      recoveryRecommendation: caution,
+      unifiedContext: context('Recovery comes first today.'),
     )!;
     expect(result.todayFocus, contains('Recovery comes first'));
-    expect(result.todayFocus, contains('lighter option'));
+    expect(result.todayFocus, 'Recovery comes first today.');
     expect(result.todayFocus, isNot(contains('Completing')));
   });
 
@@ -116,7 +126,7 @@ void main() {
     final result = advisor.advise(
       plan: plan(WeeklyMissionType.improveWorkoutConsistency),
       isPlannedTrainingDay: true,
-      recoveryRecommendation: caution,
+      unifiedContext: context('How you feel comes first today.'),
       selfReportedPain: true,
       selfReportedFatigue: true,
     )!;
@@ -130,8 +140,8 @@ void main() {
       isPlannedTrainingDay: true,
       dailyDecision: CoachDecision.lighterSession,
     )!;
-    expect(result.todayFocus, contains('lighter choice comes first'));
-    expect(result.todayFocus, contains('without returning to the full'));
+    expect(result.todayFocus, contains('lighter approach'));
+    expect(result.todayFocus, contains('without returning to full'));
   });
 
   test('plannedSession never increases intensity', () {
@@ -142,7 +152,7 @@ void main() {
     )!;
     expect(result.todayFocus, contains('without adding intensity'));
     expect(result.todayFocus, isNot(contains('harder')));
-    expect(result.todayFocus, isNot(contains('extra work')));
+    expect(result.todayFocus, contains('extra work'));
   });
 
   test('does not repeat full weekly action list or mutate mission', () {

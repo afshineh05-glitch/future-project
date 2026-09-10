@@ -1,5 +1,6 @@
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/recovery_context.dart';
+import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/wearable_history.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
@@ -61,6 +62,7 @@ class WearablesHubData {
   final CoachDecision? dailyDecision;
   final List<WearableTrend> trends;
   final WearablesCoachInsight? coachInsight;
+  final UnifiedCoachContext unifiedCoachContext;
   final bool selfReportedPainOrFatigue;
   final DateTime generatedAt;
 
@@ -73,6 +75,7 @@ class WearablesHubData {
     this.dailyDecision,
     this.trends = const [],
     this.coachInsight,
+    required this.unifiedCoachContext,
     this.selfReportedPainOrFatigue = false,
     required this.generatedAt,
   });
