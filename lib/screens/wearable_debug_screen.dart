@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/wearable_history.dart';
+import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/services/health/apple_health_service.dart';
+import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/health/wearable_sync_service.dart';
 import 'package:future_project/services/health/wearable_validation_service.dart';
 
@@ -17,11 +19,13 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
   final _service = AppleHealthService();
   final _validator = const WearableValidationService();
   final _syncService = WearableSyncService();
+  final _recoveryService = RecoveryContextService();
   WearablePermissionResult? _permission;
   WearableData? _data;
   ValidatedWearableData? _validated;
   WearableSyncResult? _syncResult;
   WearableDailyRecord? _latestRecord;
+  RecoveryContext? _recoveryContext;
   bool _busy = false;
   String? _error;
 
@@ -94,6 +98,21 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
     });
   }
 
+  Future<void> _loadRecoveryContext() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final context = await _recoveryService.load();
+      if (mounted) setState(() => _recoveryContext = context);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) return const SizedBox.shrink();
@@ -123,6 +142,10 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
                 onPressed: _busy || _validated == null ? null : _sync,
                 child: const Text('Sync validated data'),
               ),
+              OutlinedButton(
+                onPressed: _busy ? null : _loadRecoveryContext,
+                child: const Text('Load recovery context'),
+              ),
             ],
           ),
           if (_syncResult != null) ...[
@@ -136,6 +159,34 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
               'Supabase daily record: ${_latestRecord!.localDateKey}\n'
               'Last successful sync: '
               '${_latestRecord!.syncedAt?.toLocal().toIso8601String() ?? 'unknown'}',
+            ),
+          ],
+          if (_recoveryContext != null) ...[
+            const SizedBox(height: 18),
+            Text(
+              'Recovery Context',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text('Overall: ${_recoveryContext!.overallState.name}'),
+            _recoveryMetric('Sleep', _recoveryContext!.sleepContext),
+            _recoveryMetric(
+              'Resting HR',
+              _recoveryContext!.restingHeartRateContext,
+            ),
+            _recoveryMetric(
+              'Recent activity',
+              _recoveryContext!.recentActivityContext,
+            ),
+            Text(
+              'Workouts: ${_recoveryContext!.recentWorkoutContext.state.name} '
+              '(${_recoveryContext!.recentWorkoutContext.completedSessionsLast7Days} completed / 7 days)',
+            ),
+            Text(
+              'Coverage: ${_recoveryContext!.dataCoverage.wearableDays} wearable days, '
+              '${_recoveryContext!.dataCoverage.comparableComponents} comparable components',
+            ),
+            Text(
+              'Evidence: ${_recoveryContext!.evidence.map((item) => item.name).join(', ')}',
             ),
           ],
           if (_busy) ...[
@@ -242,6 +293,16 @@ class _WearableDebugScreenState extends State<WearableDebugScreen> {
     ),
     isThreeLine: true,
   );
+
+  Widget _recoveryMetric(String label, RecoveryMetricContext metric) {
+    final latest = metric.latestValue?.toStringAsFixed(1) ?? 'missing';
+    final baseline = metric.personalBaseline?.toStringAsFixed(1) ?? 'n/a';
+    return Text(
+      '$label: ${metric.state.name}; latest $latest ${metric.unit ?? ''}; '
+      'baseline $baseline (${metric.baselineDays} days); '
+      '${metric.evidence.map((item) => item.name).join(', ')}',
+    );
+  }
 
   String _number(double? value, int decimals, {String suffix = ''}) =>
       value == null ? 'No data' : '${value.toStringAsFixed(decimals)}$suffix';
