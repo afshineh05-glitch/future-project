@@ -1,15 +1,153 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/wearable_history.dart';
+import 'package:future_project/models/wearables_hub.dart';
 import 'package:future_project/screens/wearables_hub_screen.dart';
+import 'package:future_project/services/health/wearable_validation_service.dart';
+import 'package:future_project/services/wearables_hub_service.dart';
+
+WearablesHubData _hubData({required bool populated}) {
+  final now = DateTime(2026, 9, 11, 12);
+  final today = populated
+      ? const WearableValidationService().validate(
+          WearableData(
+            rangeStart: DateTime(2026, 9, 11),
+            rangeEnd: now,
+            permissionStatus: WearablePermissionStatus.authorized,
+            steps: 8200,
+            activeEnergyKilocalories: 410,
+            restingHeartRateBpm: 62,
+            sleepDuration: const Duration(hours: 7),
+            workouts: const [],
+            unavailableMetrics: const {},
+            sourceDates: {
+              WearableMetric.steps: now,
+              WearableMetric.activeEnergy: now,
+              WearableMetric.restingHeartRate: now,
+              WearableMetric.sleepDuration: now,
+            },
+          ),
+          now: now,
+        )
+      : null;
+  return const WearablesHubEngine().build(
+    source: ConnectedHealthSource(
+      provider: WearableProvider.appleHealth,
+      displayName: 'Apple Health',
+      permissionStatus: WearablePermissionStatus.authorized,
+      dataAvailable: true,
+    ),
+    now: now,
+    today: today,
+  );
+}
 
 void main() {
   final screen = File(
     'lib/screens/wearables_hub_screen.dart',
   ).readAsStringSync();
+  final bleCard = File(
+    'lib/widgets/ble_device_management_card.dart',
+  ).readAsStringSync();
+
+  test('approved hero and motivational direction are present', () {
+    expect(screen, contains('Your health. Everywhere with you.'));
+    expect(
+      screen,
+      contains('Connect your favorite devices to get automatic data'),
+    );
+    expect(screen, contains('Better data.\\nA stronger you.'));
+    for (final benefit in [
+      'More accurate tracking',
+      'Personalized coaching',
+      'Reach your goals faster',
+      'Your data stays private',
+    ]) {
+      expect(screen, contains(benefit));
+    }
+  });
+
+  test('provider grid is honest and Apple Health has one connect card', () {
+    for (final provider in ['WHOOP', 'Garmin', 'Fitbit', 'Polar', 'Oura']) {
+      expect(screen, contains("'$provider'"));
+    }
+    expect(RegExp("title: 'Apple Health'").allMatches(screen), hasLength(1));
+    expect(screen, contains("'Connect Your Device'"));
+    expect(screen, contains("'Not connected'"));
+    expect(screen, contains('BleDeviceManagementCard('));
+  });
+
+  test('BLE available and unavailable states use friendly product copy', () {
+    expect(bleCard, contains("BleAvailability.ready => 'Bluetooth is ready.'"));
+    expect(bleCard, contains('Bluetooth Low Energy is not supported'));
+    expect(bleCard, contains('Turn on Bluetooth to scan'));
+    expect(bleCard, isNot(contains('UnimplementedError')));
+  });
+
+  test('raw technical errors are sanitized', () {
+    expect(
+      safeStatusMessage('UnimplementedError: platform method'),
+      'This health source is unavailable right now.',
+    );
+    expect(
+      safeStatusMessage('Health data is still syncing.'),
+      'Health data is still syncing.',
+    );
+    expect(screen, isNot(contains('Text(data.source.statusMessage!')));
+  });
+
+  test('responsive layout uses breakpoints without fixed page width', () {
+    expect(screen, contains('viewportWidth >= 700'));
+    expect(screen, contains('viewportWidth >= 480'));
+    expect(screen, contains("final compact = viewportWidth < 560"));
+    expect(
+      screen,
+      contains('constraints: const BoxConstraints(maxWidth: 760)'),
+    );
+    expect(screen, contains('LayoutBuilder'));
+    expect(screen, contains('Wrap('));
+  });
+
+  test('connected devices section is derived from real permission state', () {
+    expect(screen, contains("'Connected Devices'"));
+    expect(screen, contains('WearablePermissionStatus.authorized'));
+    expect(screen, contains('WearablePermissionStatus.partiallyAuthorized'));
+    expect(screen, contains('No confirmed health sources or devices'));
+  });
+
+  for (final size in [const Size(360, 800), const Size(1024, 900)]) {
+    testWidgets('responsive Wearables layout does not overflow at $size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final data = _hubData(populated: true);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WearablesHubScreen(
+            loadData: () async => data,
+            requestPermissions: () async => const WearablePermissionResult(
+              WearablePermissionStatus.authorized,
+            ),
+            bleDeviceCard: const SizedBox(
+              key: ValueKey('fake_ble_provider'),
+              height: 120,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your health. Everywhere with you.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fake_ble_provider')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   test('unsupported platform uses one compact non-actionable empty state', () {
     expect(

@@ -44,7 +44,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   String? _errorMessage;
   Map<String, dynamic>? _foundation;
   TodayCoachState? _todayState;
+  // Retained for the existing smart-priority load lifecycle.
+  // ignore: unused_field
   String? _smartPriority;
+  // ignore: unused_field
   bool _isPriorityLoading = false;
 
   String? _smartMorningBrief;
@@ -1311,76 +1314,6 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
     } finally {
       if (mounted) setState(() => _isDecisionSaving = false);
     }
-  }
-
-  Widget _buildPriorityCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: AppTheme.calorieCard,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: AppTheme.primaryGreen.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.center_focus_strong_outlined,
-            color: AppTheme.primaryGreen,
-            size: 30,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Today’s Priority',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_isPriorityLoading)
-                  const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Preparing today’s priority...',
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.5,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Text(
-                    _smartPriority ?? _todayState!.priority,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildReminderCard() {

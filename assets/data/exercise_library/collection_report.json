@@ -1,0 +1,18 @@
+﻿{
+    "generated_from":  "local_catalog",
+    "expected_count":  412,
+    "collected_count":  412,
+    "collection_complete":  true,
+    "unique_ids":  412,
+    "unique_slugs":  412,
+    "unique_identities":  412,
+    "metadata_verified":  10,
+    "metadata_pending":  402,
+    "male_anatomy_approved_existing":  4,
+    "male_anatomy_pending_generation":  408,
+    "female_anatomy_approved_existing":  0,
+    "female_anatomy_pending_generation":  412,
+    "video_pending_license":  412,
+    "runtime_network_dependency":  false,
+    "valid":  true
+}

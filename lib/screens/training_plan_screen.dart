@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:future_project/models/canonical_exercise.dart';
+import 'package:future_project/services/canonical_exercise_resolver.dart';
+import 'package:future_project/services/exercise_catalog_repository.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/exercise_video_player.dart';
 import 'package:future_project/services/exercise_anatomy_service.dart';
@@ -53,6 +57,13 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
     }
 
     try {
+      final Map<String, dynamic>? foundation = await s
+          .from('user_foundations')
+          .select('sex')
+          .eq('user_id', user.id)
+          .maybeSingle();
+      final ExerciseAnatomyProfile? anatomyProfile =
+          ExerciseAnatomyService.profileFromFoundationValue(foundation?['sex']);
       final p = await s
           .from('training_plans')
           .select(
@@ -89,123 +100,77 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
           .eq('plan_id', p['id'])
           .order('day_number');
 
-      final libraryRaw = await s
-          .from('exercise_library')
-          .select(
-            'exercise_id, exercise_name, primary_muscles, secondary_muscles, '
-            'anatomy_asset, exercise_effect, video_url',
-          )
-          .eq('is_active', true);
+      final List<CanonicalExercise> library = await ExerciseCatalogRepository(
+        rootBundle.loadString,
+      ).load();
+      final CanonicalExerciseResolver resolver = CanonicalExerciseResolver(
+        library,
+      );
 
-      final Map<String, Map<String, dynamic>> libraryById =
-          <String, Map<String, dynamic>>{};
-
-      final List<Map<String, dynamic>> libraryRows =
-          (libraryRaw as List)
-              .map((item) => Map<String, dynamic>.from(item as Map))
-              .toList();
-
-      for (final item in libraryRows) {
-        final id = item['exercise_id']?.toString().trim() ?? '';
-        if (id.isNotEmpty) {
-          libraryById[id] = item;
-        }
+      CanonicalExercise? findLibraryItem(Map<String, dynamic> exercise) {
+        return resolver
+            .resolve(
+              canonicalId: exercise['exercise_id']?.toString(),
+              name: _normalizeExerciseLookup(
+                exercise['exercise_name']?.toString() ?? '',
+              ),
+            )
+            .exercise;
       }
 
-      Map<String, dynamic>? findLibraryItem(
-        Map<String, dynamic> exercise,
-      ) {
-        final exerciseId =
-            exercise['exercise_id']?.toString().trim() ?? '';
+      final loaded =
+          (raw as List).map((e) {
+            final d = Map<String, dynamic>.from(e as Map);
 
-        if (exerciseId.isNotEmpty && libraryById.containsKey(exerciseId)) {
-          return libraryById[exerciseId];
-        }
+            final ex =
+                ((d['training_exercises'] as List?) ?? []).map((x) {
+                  final exercise = Map<String, dynamic>.from(x as Map);
+                  final libraryItem = findLibraryItem(exercise);
 
-        final generatedName =
-            _normalizeExerciseLookup(
-          exercise['exercise_name']?.toString() ?? '',
-        );
+                  if (libraryItem != null) {
+                    exercise['exercise_id'] = libraryItem.canonicalId;
+                    exercise['canonical_exercise_name'] =
+                        libraryItem.displayName;
+                    if (libraryItem.primaryMuscles.isNotEmpty) {
+                      exercise['primary_muscles'] = libraryItem.primaryMuscles;
+                    }
+                    if (libraryItem.secondaryMuscles.isNotEmpty) {
+                      exercise['secondary_muscles'] =
+                          libraryItem.secondaryMuscles;
+                    }
+                    exercise['resolved_anatomy_asset'] =
+                        ExerciseAnatomyService.resolve(
+                          profile: anatomyProfile,
+                          maleAsset: libraryItem.maleAnatomyAsset,
+                          femaleAsset: libraryItem.femaleAnatomyAsset,
+                          legacyExerciseName: libraryItem.sourceName,
+                        );
+                    exercise['video_url'] =
+                        libraryItem.videoAsset ?? exercise['video_url'];
+                    exercise['library_matched'] = true;
+                  } else {
+                    exercise['library_matched'] = false;
+                    exercise['resolved_anatomy_asset'] =
+                        ExerciseAnatomyService.resolve(
+                          profile: anatomyProfile,
+                          legacyExerciseName: exercise['exercise_name']
+                              ?.toString(),
+                        );
+                  }
 
-        if (generatedName.isEmpty) return null;
+                  return exercise;
+                }).toList()..sort(
+                  (a, b) => ((a['exercise_order'] as num?)?.toInt() ?? 0)
+                      .compareTo((b['exercise_order'] as num?)?.toInt() ?? 0),
+                );
 
-        Map<String, dynamic>? bestMatch;
-        int bestLength = 0;
-
-        for (final item in libraryRows) {
-          final libraryName =
-              _normalizeExerciseLookup(
-            item['exercise_name']?.toString() ?? '',
-          );
-
-          if (libraryName.isEmpty) continue;
-
-          final exact = generatedName == libraryName;
-          final generatedExtendsLibrary =
-              generatedName.startsWith('$libraryName ') ||
-              generatedName.startsWith('$libraryName(');
-
-          if ((exact || generatedExtendsLibrary) &&
-              libraryName.length > bestLength) {
-            bestMatch = item;
-            bestLength = libraryName.length;
-          }
-        }
-
-        return bestMatch;
-      }
-
-      final loaded = (raw as List).map((e) {
-        final d = Map<String, dynamic>.from(e as Map);
-
-        final ex = ((d['training_exercises'] as List?) ?? [])
-            .map((x) {
-              final exercise = Map<String, dynamic>.from(x as Map);
-              final libraryItem = findLibraryItem(exercise);
-
-              if (libraryItem != null) {
-                exercise['exercise_id'] =
-                    libraryItem['exercise_id'];
-                exercise['canonical_exercise_name'] =
-                    libraryItem['exercise_name'];
-                exercise['primary_muscles'] =
-                    libraryItem['primary_muscles'] ??
-                        exercise['primary_muscles'];
-                exercise['secondary_muscles'] =
-                    libraryItem['secondary_muscles'] ??
-                        exercise['secondary_muscles'];
-                exercise['anatomy_asset'] =
-                    libraryItem['anatomy_asset'];
-                exercise['exercise_effect'] =
-                    libraryItem['exercise_effect'] ??
-                        exercise['exercise_effect'];
-                exercise['video_url'] =
-                    libraryItem['video_url'] ??
-                        exercise['video_url'];
-                exercise['library_matched'] = true;
-              } else {
-                exercise['library_matched'] = false;
-              }
-
-              return exercise;
-            })
-            .toList()
-          ..sort(
-            (a, b) =>
-                ((a['exercise_order'] as num?)?.toInt() ?? 0).compareTo(
-              (b['exercise_order'] as num?)?.toInt() ?? 0,
+            d['training_exercises'] = ex;
+            return d;
+          }).toList()..sort(
+            (a, b) => ((a['day_number'] as num?)?.toInt() ?? 0).compareTo(
+              (b['day_number'] as num?)?.toInt() ?? 0,
             ),
           );
-
-        d['training_exercises'] = ex;
-        return d;
-      }).toList()
-        ..sort(
-          (a, b) =>
-              ((a['day_number'] as num?)?.toInt() ?? 0).compareTo(
-            (b['day_number'] as num?)?.toInt() ?? 0,
-          ),
-        );
 
       if (!mounted) return;
       setState(() {
@@ -227,7 +192,6 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
     }
   }
 
-
   Future<void> _generateTrainingPlan() async {
     if (_isGenerating) return;
 
@@ -237,28 +201,30 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
     });
 
     try {
-      final FunctionResponse strategyResponse =
-          await Supabase.instance.client.functions.invoke(
-        'generate-training-strategy',
-        body: const <String, dynamic>{},
-      );
+      final FunctionResponse strategyResponse = await Supabase
+          .instance
+          .client
+          .functions
+          .invoke(
+            'generate-training-strategy',
+            body: const <String, dynamic>{},
+          );
 
-      if (strategyResponse.status < 200 ||
-          strategyResponse.status >= 300) {
+      if (strategyResponse.status < 200 || strategyResponse.status >= 300) {
         throw Exception(
           'Strategy returned ${strategyResponse.status}: '
           '${strategyResponse.data}',
         );
       }
 
-      final FunctionResponse response =
-          await Supabase.instance.client.functions.invoke(
-        'generate-training-plan',
-        body: const <String, dynamic>{
-          'mode': 'generate',
-          'use_saved_strategy': true,
-        },
-      );
+      final FunctionResponse response = await Supabase.instance.client.functions
+          .invoke(
+            'generate-training-plan',
+            body: const <String, dynamic>{
+              'mode': 'generate',
+              'use_saved_strategy': true,
+            },
+          );
 
       if (response.status < 200 || response.status >= 300) {
         throw Exception(
@@ -272,9 +238,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your Training Plan is ready.'),
-        ),
+        const SnackBar(content: Text('Your Training Plan is ready.')),
       );
     } on FunctionException catch (e) {
       if (!mounted) return;
@@ -297,20 +261,19 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
     }
   }
 
-
   Future<void> _showAdjustPlanSheet() async {
     if (_isAdjusting || plan == null) return;
 
     final Map<String, dynamic>? request =
         await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      backgroundColor: AppTheme.card,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (BuildContext sheetContext) {
-        return _AdjustPlanSheet(days: days);
-      },
-    );
+          context: context,
+          backgroundColor: AppTheme.card,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (BuildContext sheetContext) {
+            return _AdjustPlanSheet(days: days);
+          },
+        );
 
     if (!mounted || request == null) return;
 
@@ -320,19 +283,19 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
     });
 
     try {
-      final FunctionResponse response =
-          await Supabase.instance.client.functions.invoke(
-        'generate-training-plan',
-        body: <String, dynamic>{
-          'mode': 'adjust',
-          'reason_code': request['reason_code'],
-          'reason_label': request['reason_label'],
-          'day_number': request['day_number'],
-          'exercise_name': request['exercise_name'],
-          'user_note': request['user_note'],
-          'new_session_minutes': request['new_session_minutes'],
-        },
-      );
+      final FunctionResponse response = await Supabase.instance.client.functions
+          .invoke(
+            'generate-training-plan',
+            body: <String, dynamic>{
+              'mode': 'adjust',
+              'reason_code': request['reason_code'],
+              'reason_label': request['reason_label'],
+              'day_number': request['day_number'],
+              'exercise_name': request['exercise_name'],
+              'user_note': request['user_note'],
+              'new_session_minutes': request['new_session_minutes'],
+            },
+          );
 
       if (response.status < 200 || response.status >= 300) {
         throw Exception(
@@ -346,9 +309,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your adjusted Training Plan is ready.'),
-        ),
+        const SnackBar(content: Text('Your adjusted Training Plan is ready.')),
       );
     } on FunctionException catch (e) {
       if (!mounted) return;
@@ -393,36 +354,29 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
           ),
         ],
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-      floatingActionButton:
-          plan == null || loading || error != null
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed:
-                      _isAdjusting ? null : _showAdjustPlanSheet,
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                  icon: _isAdjusting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.tune_rounded),
-                  label: Text(
-                    _isAdjusting
-                        ? 'Adjusting...'
-                        : 'Adjust Plan',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: plan == null || loading || error != null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _isAdjusting ? null : _showAdjustPlanSheet,
+              backgroundColor: AppTheme.primaryGreen,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              icon: _isAdjusting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.tune_rounded),
+              label: Text(
+                _isAdjusting ? 'Adjusting...' : 'Adjust Plan',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -435,10 +389,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (error != null)
-              _Info(
-                title: 'Could not load Training Plan',
-                text: error!,
-              )
+              _Info(title: 'Could not load Training Plan', text: error!)
             else if (plan == null)
               _EmptyTrainingPlan(
                 generating: _isGenerating,
@@ -480,9 +431,7 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                _TrainingDayCard(
-                  day: days[selectedDayIndex],
-                ),
+                _TrainingDayCard(day: days[selectedDayIndex]),
               ],
             ],
           ],
@@ -495,26 +444,19 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
 class _AdjustPlanSheet extends StatefulWidget {
   final List<Map<String, dynamic>> days;
 
-  const _AdjustPlanSheet({
-    required this.days,
-  });
+  const _AdjustPlanSheet({required this.days});
 
   @override
-  State<_AdjustPlanSheet> createState() =>
-      _AdjustPlanSheetState();
+  State<_AdjustPlanSheet> createState() => _AdjustPlanSheetState();
 }
 
 class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
-  static const List<Map<String, String>> _reasons =
-      <Map<String, String>>[
+  static const List<Map<String, String>> _reasons = <Map<String, String>>[
     <String, String>{
       'code': 'too_difficult',
       'label': 'The plan is too difficult',
     },
-    <String, String>{
-      'code': 'too_easy',
-      'label': 'The plan is too easy',
-    },
+    <String, String>{'code': 'too_easy', 'label': 'The plan is too easy'},
     <String, String>{
       'code': 'dislike_exercise',
       'label': "I don't like some exercises",
@@ -531,10 +473,7 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
       'code': 'physical_limitation',
       'label': 'I have new pain or a physical limitation',
     },
-    <String, String>{
-      'code': 'other',
-      'label': 'Other',
-    },
+    <String, String>{'code': 'other', 'label': 'Other'},
   ];
 
   String? _selectedReasonCode;
@@ -543,11 +482,9 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
   int? _selectedDayNumber;
   String? _selectedExerciseName;
 
-  final TextEditingController _noteController =
-      TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
 
-  final TextEditingController _minutesController =
-      TextEditingController();
+  final TextEditingController _minutesController = TextEditingController();
 
   @override
   void dispose() {
@@ -557,29 +494,22 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
   }
 
   List<Map<String, dynamic>> get _exerciseTargets {
-    final List<Map<String, dynamic>> targets =
-        <Map<String, dynamic>>[];
+    final List<Map<String, dynamic>> targets = <Map<String, dynamic>>[];
 
     for (final Map<String, dynamic> day in widget.days) {
-      final int dayNumber =
-          (day['day_number'] as num?)?.toInt() ?? 0;
+      final int dayNumber = (day['day_number'] as num?)?.toInt() ?? 0;
 
       final List<Map<String, dynamic>> exercises =
-          (day['training_exercises']
-                      as List<Map<String, dynamic>>?) ??
-              <Map<String, dynamic>>[];
+          (day['training_exercises'] as List<Map<String, dynamic>>?) ??
+          <Map<String, dynamic>>[];
 
       for (final Map<String, dynamic> exercise in exercises) {
-        final String name =
-            exercise['exercise_name']?.toString() ??
-                'Exercise';
+        final String name = exercise['exercise_name']?.toString() ?? 'Exercise';
 
-        targets.add(
-          <String, dynamic>{
-            'day_number': dayNumber,
-            'exercise_name': name,
-          },
-        );
+        targets.add(<String, dynamic>{
+          'day_number': dayNumber,
+          'exercise_name': name,
+        });
       }
     }
 
@@ -602,12 +532,9 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
     }
 
     if (_selectedReasonCode == 'time_changed') {
-      final int? minutes =
-          int.tryParse(_minutesController.text.trim());
+      final int? minutes = int.tryParse(_minutesController.text.trim());
 
-      return minutes != null &&
-          minutes >= 15 &&
-          minutes <= 180;
+      return minutes != null && minutes >= 15 && minutes <= 180;
     }
 
     if (_selectedReasonCode == 'physical_limitation' ||
@@ -618,10 +545,7 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
     return true;
   }
 
-  void _chooseReason(
-    String code,
-    String label,
-  ) {
+  void _chooseReason(String code, String label) {
     setState(() {
       _selectedReasonCode = code;
       _selectedReasonLabel = label;
@@ -635,30 +559,25 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
   void _submit() {
     if (!_canSubmit) return;
 
-    final int? newMinutes =
-        _selectedReasonCode == 'time_changed'
-            ? int.tryParse(
-                _minutesController.text.trim(),
-              )
-            : null;
+    final int? newMinutes = _selectedReasonCode == 'time_changed'
+        ? int.tryParse(_minutesController.text.trim())
+        : null;
 
     final String targetLabel =
         _selectedDayNumber != null &&
-                (_selectedExerciseName?.isNotEmpty ?? false)
-            ? 'Day $_selectedDayNumber · $_selectedExerciseName'
-            : '';
+            (_selectedExerciseName?.isNotEmpty ?? false)
+        ? 'Day $_selectedDayNumber · $_selectedExerciseName'
+        : '';
 
-    Navigator.of(context).pop(
-      <String, dynamic>{
-        'reason_code': _selectedReasonCode,
-        'reason_label': _selectedReasonLabel,
-        'day_number': _selectedDayNumber,
-        'exercise_name': _selectedExerciseName,
-        'target_label': targetLabel,
-        'user_note': _noteController.text.trim(),
-        'new_session_minutes': newMinutes,
-      },
-    );
+    Navigator.of(context).pop(<String, dynamic>{
+      'reason_code': _selectedReasonCode,
+      'reason_label': _selectedReasonLabel,
+      'day_number': _selectedDayNumber,
+      'exercise_name': _selectedExerciseName,
+      'target_label': targetLabel,
+      'user_note': _noteController.text.trim(),
+      'new_session_minutes': newMinutes,
+    });
   }
 
   @override
@@ -686,10 +605,7 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
               const SizedBox(height: 7),
               const Text(
                 'Tell MuscleUp why you want a change, then identify the exact part of the plan when needed.',
-                style: TextStyle(
-                  height: 1.45,
-                  color: AppTheme.textSecondary,
-                ),
+                style: TextStyle(height: 1.45, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 18),
 
@@ -715,11 +631,9 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
                           });
                         },
                         style: OutlinedButton.styleFrom(
-                          minimumSize:
-                              const Size.fromHeight(52),
+                          minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                         ),
                         child: const Text('Back'),
@@ -729,24 +643,18 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
                     Expanded(
                       flex: 2,
                       child: FilledButton(
-                        onPressed:
-                            _canSubmit ? _submit : null,
+                        onPressed: _canSubmit ? _submit : null,
                         style: FilledButton.styleFrom(
-                          backgroundColor:
-                              AppTheme.primaryGreen,
+                          backgroundColor: AppTheme.primaryGreen,
                           foregroundColor: Colors.white,
-                          minimumSize:
-                              const Size.fromHeight(52),
+                          minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                         ),
                         child: const Text(
                           'Update My Plan',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),
@@ -784,60 +692,48 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        ..._reasons.map(
-          (Map<String, String> reason) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _chooseReason(
-                    reason['code']!,
-                    reason['label']!,
+        ..._reasons.map((Map<String, String> reason) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _chooseReason(reason['code']!, reason['label']!),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 15,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(14),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 15,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.background,
-                      borderRadius:
-                          BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppTheme.border,
-                      ),
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            reason['label']!,
-                            style: const TextStyle(
-                              fontWeight:
-                                  FontWeight.w600,
-                              color:
-                                  AppTheme.textPrimary,
-                            ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.background,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          reason['label']!,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
-                        const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color:
-                              AppTheme.textSecondary,
-                        ),
-                      ],
-                    ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -889,26 +785,19 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
               filled: true,
               fillColor: AppTheme.background,
               border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(16),
-                borderSide:
-                    BorderSide(color: AppTheme.border),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(16),
-                borderSide:
-                    BorderSide(color: AppTheme.border),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
             ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Use a value between 15 and 180 minutes.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
         ],
       );
@@ -917,21 +806,17 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
     if (_selectedReasonCode == 'physical_limitation') {
       return _buildNoteStep(
         title: 'What changed physically?',
-        hint:
-            'Example: Overhead pressing bothers my right shoulder.',
+        hint: 'Example: Overhead pressing bothers my right shoulder.',
       );
     }
 
     return _buildNoteStep(
       title: 'What would you like changed?',
-      hint:
-          'Tell MuscleUp what is not working for you.',
+      hint: 'Tell MuscleUp what is not working for you.',
     );
   }
 
-  Widget _buildExerciseTargetStep(
-    String title,
-  ) {
+  Widget _buildExerciseTargetStep(String title) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -954,52 +839,37 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
           ),
-          items: _exerciseTargets
-              .map<DropdownMenuItem<String>>(
-            (Map<String, dynamic> target) {
-              final int dayNumber =
-                  target['day_number'] as int;
+          items: _exerciseTargets.map<DropdownMenuItem<String>>((
+            Map<String, dynamic> target,
+          ) {
+            final int dayNumber = target['day_number'] as int;
 
-              final String name =
-                  target['exercise_name']
-                      .toString();
+            final String name = target['exercise_name'].toString();
 
-              return DropdownMenuItem<String>(
-                value: '$dayNumber::$name',
-                child: Text(
-                  'Day $dayNumber · $name',
-                ),
-              );
-            },
-          ).toList(),
+            return DropdownMenuItem<String>(
+              value: '$dayNumber::$name',
+              child: Text('Day $dayNumber · $name'),
+            );
+          }).toList(),
           onChanged: (String? value) {
             if (value == null) return;
 
-            final int splitIndex =
-                value.indexOf('::');
+            final int splitIndex = value.indexOf('::');
 
             if (splitIndex <= 0) return;
 
             setState(() {
-              _selectedDayNumber =
-                  int.tryParse(
-                value.substring(0, splitIndex),
-              );
+              _selectedDayNumber = int.tryParse(value.substring(0, splitIndex));
 
-              _selectedExerciseName =
-                  value.substring(splitIndex + 2);
+              _selectedExerciseName = value.substring(splitIndex + 2);
             });
           },
         ),
@@ -1009,21 +879,16 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
           maxLines: 3,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            hintText:
-                'Optional: tell us what specifically is wrong.',
+            hintText: 'Optional: tell us what specifically is wrong.',
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
           ),
         ),
@@ -1031,10 +896,7 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
     );
   }
 
-  Widget _buildNoteStep({
-    required String title,
-    required String hint,
-  }) {
+  Widget _buildNoteStep({required String title, required String hint}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -1056,16 +918,12 @@ class _AdjustPlanSheetState extends State<_AdjustPlanSheet> {
             filled: true,
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius:
-                  BorderRadius.circular(16),
-              borderSide:
-                  BorderSide(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: AppTheme.border),
             ),
           ),
         ),
@@ -1165,8 +1023,7 @@ class _DaySelector extends StatelessWidget {
         Widget buildDay(int index, {double? width}) {
           final day = days[index];
           final active = selectedIndex == index;
-          final number =
-              (day['day_number'] as num?)?.toInt() ?? index + 1;
+          final number = (day['day_number'] as num?)?.toInt() ?? index + 1;
           final focus = day['focus']?.toString().trim() ?? '';
 
           return SizedBox(
@@ -1183,20 +1040,17 @@ class _DaySelector extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: active
-                        ? AppTheme.primaryGreen
-                        : AppTheme.card,
+                    color: active ? AppTheme.primaryGreen : AppTheme.card,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: active
-                          ? AppTheme.primaryGreen
-                          : AppTheme.border,
+                      color: active ? AppTheme.primaryGreen : AppTheme.border,
                     ),
                     boxShadow: active
                         ? [
                             BoxShadow(
-                              color: AppTheme.primaryGreen
-                                  .withValues(alpha: .14),
+                              color: AppTheme.primaryGreen.withValues(
+                                alpha: .14,
+                              ),
                               blurRadius: 14,
                               offset: const Offset(0, 5),
                             ),
@@ -1210,9 +1064,7 @@ class _DaySelector extends StatelessWidget {
                         'DAY $number',
                         maxLines: 1,
                         style: TextStyle(
-                          color: active
-                              ? Colors.white
-                              : AppTheme.textPrimary,
+                          color: active ? Colors.white : AppTheme.textPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
                           letterSpacing: .4,
@@ -1246,9 +1098,7 @@ class _DaySelector extends StatelessWidget {
           return Row(
             children: List.generate(count, (index) {
               return Padding(
-                padding: EdgeInsets.only(
-                  right: index == count - 1 ? 0 : gap,
-                ),
+                padding: EdgeInsets.only(right: index == count - 1 ? 0 : gap),
                 child: buildDay(index, width: fittedWidth),
               );
             }),
@@ -1280,8 +1130,7 @@ class _TrainingDayCard extends StatelessWidget {
     final dayNumber = (day['day_number'] as num?)?.toInt() ?? 0;
     final title = day['title']?.toString() ?? 'Training Day';
     final focus = day['focus']?.toString().trim() ?? '';
-    final sessionStrategy =
-        day['session_strategy']?.toString().trim() ?? '';
+    final sessionStrategy = day['session_strategy']?.toString().trim() ?? '';
     final exercises =
         (day['training_exercises'] as List<Map<String, dynamic>>?) ?? [];
 
@@ -1317,8 +1166,7 @@ class _TrainingDayCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color:
-                          AppTheme.primaryGreen.withValues(alpha: .12),
+                      color: AppTheme.primaryGreen.withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     alignment: Alignment.center,
@@ -1389,10 +1237,7 @@ class _TrainingDayCard extends StatelessWidget {
                   children: primaryMuscles
                       .take(4)
                       .map(
-                        (muscle) => _MuscleChip(
-                          label: muscle,
-                          primary: true,
-                        ),
+                        (muscle) => _MuscleChip(label: muscle, primary: true),
                       )
                       .toList(),
                 ),
@@ -1433,8 +1278,8 @@ class _TrainingDayCard extends StatelessWidget {
                       sessionStrategy.isNotEmpty
                           ? sessionStrategy
                           : (exercises.isEmpty
-                              ? 'This session will be organized around its primary training priority.'
-                              : 'The session progresses from priority work to supporting volume while managing fatigue.'),
+                                ? 'This session will be organized around its primary training priority.'
+                                : 'The session progresses from priority work to supporting volume while managing fatigue.'),
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12.5,
@@ -1499,10 +1344,7 @@ class _ExerciseCard extends StatelessWidget {
   final int number;
   final Map<String, dynamic> exercise;
 
-  const _ExerciseCard({
-    required this.number,
-    required this.exercise,
-  });
+  const _ExerciseCard({required this.number, required this.exercise});
 
   @override
   Widget build(BuildContext context) {
@@ -1513,14 +1355,13 @@ class _ExerciseCard extends StatelessWidget {
     final primary = _stringList(exercise['primary_muscles']);
     final secondary = _stringList(exercise['secondary_muscles']);
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
-    final adaptation =
-        exercise['intended_adaptation']?.toString().trim() ?? '';
-    final libraryAnatomy =
-        exercise['anatomy_asset']?.toString().trim();
-    final anatomyAsset =
-        libraryAnatomy != null && libraryAnatomy.isNotEmpty
-            ? libraryAnatomy
-            : ExerciseAnatomyService.assetFor(name);
+    final adaptation = exercise['intended_adaptation']?.toString().trim() ?? '';
+    final resolvedAnatomy = exercise['resolved_anatomy_asset']
+        ?.toString()
+        .trim();
+    final anatomyAsset = resolvedAnatomy != null && resolvedAnatomy.isNotEmpty
+        ? resolvedAnatomy
+        : null;
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),
@@ -1559,7 +1400,7 @@ class _ExerciseCard extends StatelessWidget {
                             anatomyAsset,
                             fit: BoxFit.cover,
                             alignment: Alignment.topCenter,
-                            errorBuilder: (_, __, ___) => const Center(
+                            errorBuilder: (_, _, _) => const Center(
                               child: Icon(
                                 Icons.accessibility_new_rounded,
                                 color: AppTheme.primaryGreen,
@@ -1606,18 +1447,12 @@ class _ExerciseCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 5,
                       children: [
-                        ...primary.take(2).map(
-                              (m) => _MuscleChip(
-                                label: m,
-                                primary: true,
-                              ),
-                            ),
-                        ...secondary.take(1).map(
-                              (m) => _MuscleChip(
-                                label: m,
-                                primary: false,
-                              ),
-                            ),
+                        ...primary
+                            .take(2)
+                            .map((m) => _MuscleChip(label: m, primary: true)),
+                        ...secondary
+                            .take(1)
+                            .map((m) => _MuscleChip(label: m, primary: false)),
                       ],
                     ),
                   ],
@@ -1653,8 +1488,9 @@ class _ExerciseCard extends StatelessWidget {
                                     vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.primaryGreen
-                                        .withValues(alpha: .10),
+                                    color: AppTheme.primaryGreen.withValues(
+                                      alpha: .10,
+                                    ),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -1702,10 +1538,7 @@ class _ExerciseCard extends StatelessWidget {
 class ExerciseDetailScreen extends StatelessWidget {
   final Map<String, dynamic> exercise;
 
-  const ExerciseDetailScreen({
-    super.key,
-    required this.exercise,
-  });
+  const ExerciseDetailScreen({super.key, required this.exercise});
 
   @override
   Widget build(BuildContext context) {
@@ -1718,12 +1551,12 @@ class ExerciseDetailScreen extends StatelessWidget {
     final primary = _stringList(exercise['primary_muscles']);
     final secondary = _stringList(exercise['secondary_muscles']);
     final effect = exercise['exercise_effect']?.toString().trim() ?? '';
-    final libraryAnatomy =
-        exercise['anatomy_asset']?.toString().trim();
-    final anatomyAsset =
-        libraryAnatomy != null && libraryAnatomy.isNotEmpty
-            ? libraryAnatomy
-            : ExerciseAnatomyService.assetFor(name);
+    final resolvedAnatomy = exercise['resolved_anatomy_asset']
+        ?.toString()
+        .trim();
+    final anatomyAsset = resolvedAnatomy != null && resolvedAnatomy.isNotEmpty
+        ? resolvedAnatomy
+        : null;
 
     return DefaultTabController(
       length: 5,
@@ -1802,13 +1635,10 @@ class ExerciseDetailScreen extends StatelessWidget {
                         ),
                         _VideoTab(
                           name: name,
-                          videoUrl:
-                              exercise['video_url']?.toString(),
+                          videoUrl: exercise['video_url']?.toString(),
                         ),
                         _HowToTab(name: name),
-                        _EffectTab(
-                          effect: effect,
-                        ),
+                        _EffectTab(effect: effect),
                       ],
                     ),
                   ),
@@ -1878,11 +1708,7 @@ class _StatGrid extends StatelessWidget {
     );
   }
 
-  Widget _divider() => Container(
-        width: 1,
-        height: 44,
-        color: AppTheme.border,
-      );
+  Widget _divider() => Container(width: 1, height: 44, color: AppTheme.border);
 }
 
 class _MiniStat extends StatelessWidget {
@@ -1900,11 +1726,7 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(
-          icon,
-          color: AppTheme.primaryGreen,
-          size: 20,
-        ),
+        Icon(icon, color: AppTheme.primaryGreen, size: 20),
         const SizedBox(height: 5),
         Text(
           value,
@@ -1918,10 +1740,7 @@ class _MiniStat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 10,
-          ),
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
         ),
       ],
     );
@@ -1961,7 +1780,7 @@ class _OverviewTab extends StatelessWidget {
                 primary.isEmpty
                     ? '$name is part of your personalized training plan.'
                     : '$name primarily targets ${primary.join(', ')}'
-                        '${secondary.isEmpty ? '.' : ' and also uses ${secondary.join(', ')}.'}',
+                          '${secondary.isEmpty ? '.' : ' and also uses ${secondary.join(', ')}.'}',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   height: 1.55,
@@ -1971,10 +1790,7 @@ class _OverviewTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _MuscleLegend(
-          primary: primary,
-          secondary: secondary,
-        ),
+        _MuscleLegend(primary: primary, secondary: secondary),
       ],
     );
   }
@@ -2033,22 +1849,16 @@ class _MusclesTab extends StatelessWidget {
                   child: Image.asset(
                     anatomyAsset!,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => _FallbackBodyMaps(
+                    errorBuilder: (_, _, _) => _FallbackBodyMaps(
                       primary: primary,
                       secondary: secondary,
                     ),
                   ),
                 )
               else
-                _FallbackBodyMaps(
-                  primary: primary,
-                  secondary: secondary,
-                ),
+                _FallbackBodyMaps(primary: primary, secondary: secondary),
               const SizedBox(height: 16),
-              _MuscleLegend(
-                primary: primary,
-                secondary: secondary,
-              ),
+              _MuscleLegend(primary: primary, secondary: secondary),
             ],
           ),
         ),
@@ -2061,10 +1871,7 @@ class _FallbackBodyMaps extends StatelessWidget {
   final List<String> primary;
   final List<String> secondary;
 
-  const _FallbackBodyMaps({
-    required this.primary,
-    required this.secondary,
-  });
+  const _FallbackBodyMaps({required this.primary, required this.secondary});
 
   @override
   Widget build(BuildContext context) {
@@ -2163,8 +1970,8 @@ class _BodyMapPainter extends CustomPainter {
     final cx = size.width / 2;
     final base = Paint()..color = AppTheme.textSecondary.withValues(alpha: .28);
     final primaryPaint = Paint()..color = AppTheme.primaryGreen;
-    final secondaryPaint =
-        Paint()..color = AppTheme.primaryGreen.withValues(alpha: .45);
+    final secondaryPaint = Paint()
+      ..color = AppTheme.primaryGreen.withValues(alpha: .45);
 
     Paint musclePaint(List<String> names) {
       if (_contains(primary, names)) return primaryPaint;
@@ -2177,22 +1984,14 @@ class _BodyMapPainter extends CustomPainter {
 
     // Torso
     final torso = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(cx, 92),
-        width: 62,
-        height: 104,
-      ),
+      Rect.fromCenter(center: Offset(cx, 92), width: 62, height: 104),
       const Radius.circular(24),
     );
     canvas.drawRRect(torso, base);
 
     // Chest / upper back
     canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(cx, 69),
-        width: 57,
-        height: 37,
-      ),
+      Rect.fromCenter(center: Offset(cx, 69), width: 57, height: 37),
       musclePaint(
         isBack
             ? ['back', 'lat', 'trapezius', 'trap', 'rhomboid']
@@ -2203,11 +2002,7 @@ class _BodyMapPainter extends CustomPainter {
     // Core
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, 108),
-          width: 31,
-          height: 48,
-        ),
+        Rect.fromCenter(center: Offset(cx, 108), width: 31, height: 48),
         const Radius.circular(12),
       ),
       musclePaint(['core', 'ab', 'oblique']),
@@ -2228,18 +2023,10 @@ class _BodyMapPainter extends CustomPainter {
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(x, 99),
-            width: 17,
-            height: 58,
-          ),
+          Rect.fromCenter(center: Offset(x, 99), width: 17, height: 58),
           const Radius.circular(9),
         ),
-        musclePaint(
-          isBack
-              ? ['tricep', 'arm']
-              : ['bicep', 'tricep', 'arm'],
-        ),
+        musclePaint(isBack ? ['tricep', 'arm'] : ['bicep', 'tricep', 'arm']),
       );
 
       canvas.drawRRect(
@@ -2257,11 +2044,7 @@ class _BodyMapPainter extends CustomPainter {
 
     // Glutes / hips
     canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(cx, 148),
-        width: 57,
-        height: 35,
-      ),
+      Rect.fromCenter(center: Offset(cx, 148), width: 57, height: 35),
       musclePaint(['glute', 'hip']),
     );
 
@@ -2271,27 +2054,17 @@ class _BodyMapPainter extends CustomPainter {
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(x, 189),
-            width: 25,
-            height: 74,
-          ),
+          Rect.fromCenter(center: Offset(x, 189), width: 25, height: 74),
           const Radius.circular(12),
         ),
         musclePaint(
-          isBack
-              ? ['hamstring', 'glute', 'leg']
-              : ['quad', 'quadricep', 'leg'],
+          isBack ? ['hamstring', 'glute', 'leg'] : ['quad', 'quadricep', 'leg'],
         ),
       );
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(x, 248),
-            width: 18,
-            height: 52,
-          ),
+          Rect.fromCenter(center: Offset(x, 248), width: 18, height: 52),
           const Radius.circular(10),
         ),
         musclePaint(['calf', 'calves']),
@@ -2311,10 +2084,7 @@ class _MuscleLegend extends StatelessWidget {
   final List<String> primary;
   final List<String> secondary;
 
-  const _MuscleLegend({
-    required this.primary,
-    required this.secondary,
-  });
+  const _MuscleLegend({required this.primary, required this.secondary});
 
   @override
   Widget build(BuildContext context) {
@@ -2322,10 +2092,7 @@ class _MuscleLegend extends StatelessWidget {
       return const _Panel(
         child: Text(
           'Target-muscle data is not available for this exercise yet.',
-          style: TextStyle(
-            color: AppTheme.textSecondary,
-            height: 1.5,
-          ),
+          style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
         ),
       );
     }
@@ -2334,21 +2101,13 @@ class _MuscleLegend extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (primary.isNotEmpty) ...[
-          const _LegendTitle(
-            color: AppTheme.primaryGreen,
-            title: 'Primary',
-          ),
+          const _LegendTitle(color: AppTheme.primaryGreen, title: 'Primary'),
           const SizedBox(height: 8),
           Wrap(
             spacing: 7,
             runSpacing: 7,
             children: primary
-                .map(
-                  (m) => _MuscleChip(
-                    label: m,
-                    primary: true,
-                  ),
-                )
+                .map((m) => _MuscleChip(label: m, primary: true))
                 .toList(),
           ),
         ],
@@ -2364,12 +2123,7 @@ class _MuscleLegend extends StatelessWidget {
             spacing: 7,
             runSpacing: 7,
             children: secondary
-                .map(
-                  (m) => _MuscleChip(
-                    label: m,
-                    primary: false,
-                  ),
-                )
+                .map((m) => _MuscleChip(label: m, primary: false))
                 .toList(),
           ),
         ],
@@ -2382,10 +2136,7 @@ class _LegendTitle extends StatelessWidget {
   final Color color;
   final String title;
 
-  const _LegendTitle({
-    required this.color,
-    required this.title,
-  });
+  const _LegendTitle({required this.color, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -2394,10 +2145,7 @@ class _LegendTitle extends StatelessWidget {
         Container(
           width: 9,
           height: 9,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 7),
         Text(
@@ -2417,20 +2165,14 @@ class _VideoTab extends StatelessWidget {
   final String name;
   final String? videoUrl;
 
-  const _VideoTab({
-    required this.name,
-    required this.videoUrl,
-  });
+  const _VideoTab({required this.name, required this.videoUrl});
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       physics: const NeverScrollableScrollPhysics(),
       children: [
-        ExerciseVideoPlayer(
-          exerciseName: name,
-          existingVideoUrl: videoUrl,
-        ),
+        ExerciseVideoPlayer(exerciseName: name, existingVideoUrl: videoUrl),
       ],
     );
   }
@@ -2462,15 +2204,18 @@ class _HowToTab extends StatelessWidget {
               _Step(number: 1, text: 'Set up in a stable starting position.'),
               _Step(
                 number: 2,
-                text: 'Use a controlled range of motion and keep your body aligned.',
+                text:
+                    'Use a controlled range of motion and keep your body aligned.',
               ),
               _Step(
                 number: 3,
-                text: 'Control the lowering phase instead of dropping the weight.',
+                text:
+                    'Control the lowering phase instead of dropping the weight.',
               ),
               _Step(
                 number: 4,
-                text: 'Finish each repetition with control and consistent breathing.',
+                text:
+                    'Finish each repetition with control and consistent breathing.',
               ),
               const SizedBox(height: 10),
               Text(
@@ -2492,9 +2237,7 @@ class _HowToTab extends StatelessWidget {
 class _EffectTab extends StatelessWidget {
   final String effect;
 
-  const _EffectTab({
-    required this.effect,
-  });
+  const _EffectTab({required this.effect});
 
   @override
   Widget build(BuildContext context) {
@@ -2509,10 +2252,7 @@ class _EffectTab extends StatelessWidget {
             children: [
               const Row(
                 children: [
-                  Icon(
-                    Icons.auto_graph_rounded,
-                    color: AppTheme.primaryGreen,
-                  ),
+                  Icon(Icons.auto_graph_rounded, color: AppTheme.primaryGreen),
                   SizedBox(width: 9),
                   Text(
                     'Training Effect',
@@ -2544,15 +2284,11 @@ class _EffectTab extends StatelessWidget {
   }
 }
 
-
 class _Step extends StatelessWidget {
   final int number;
   final String text;
 
-  const _Step({
-    required this.number,
-    required this.text,
-  });
+  const _Step({required this.number, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -2597,76 +2333,27 @@ class _Step extends StatelessWidget {
   }
 }
 
-class _Tip extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _Tip({
-    required this.icon,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            color: AppTheme.primaryGreen,
-            size: 21,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                height: 1.45,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MuscleChip extends StatelessWidget {
   final String label;
   final bool primary;
 
-  const _MuscleChip({
-    required this.label,
-    required this.primary,
-  });
+  const _MuscleChip({required this.label, required this.primary});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: AppTheme.primaryGreen.withValues(
-          alpha: primary ? .16 : .07,
-        ),
+        color: AppTheme.primaryGreen.withValues(alpha: primary ? .16 : .07),
         borderRadius: BorderRadius.circular(9),
         border: Border.all(
-          color: AppTheme.primaryGreen.withValues(
-            alpha: primary ? .34 : .16,
-          ),
+          color: AppTheme.primaryGreen.withValues(alpha: primary ? .34 : .16),
         ),
       ),
       child: Text(
         _prettyMuscle(label),
         style: TextStyle(
-          color: primary
-              ? AppTheme.primaryGreen
-              : AppTheme.textSecondary,
+          color: primary ? AppTheme.primaryGreen : AppTheme.textSecondary,
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
@@ -2674,7 +2361,6 @@ class _MuscleChip extends StatelessWidget {
     );
   }
 }
-
 
 class _EmptyTrainingPlan extends StatelessWidget {
   final bool generating;
@@ -2689,10 +2375,7 @@ class _EmptyTrainingPlan extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Panel(
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 28,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
         child: Column(
           children: [
             Container(
@@ -2722,10 +2405,7 @@ class _EmptyTrainingPlan extends StatelessWidget {
             const Text(
               'Create a personalized training cycle using your My Foundation data and the new Strategy Engine.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                height: 1.5,
-              ),
+              style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
             ),
             const SizedBox(height: 22),
             FilledButton.icon(
@@ -2744,9 +2424,7 @@ class _EmptyTrainingPlan extends StatelessWidget {
                 generating
                     ? 'Building your plan...'
                     : 'Generate My Training Plan',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: AppTheme.primaryGreen,
@@ -2768,10 +2446,7 @@ class _Info extends StatelessWidget {
   final String title;
   final String text;
 
-  const _Info({
-    required this.title,
-    required this.text,
-  });
+  const _Info({required this.title, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -2870,8 +2545,6 @@ String _prettyMuscle(String raw) {
   return cleaned
       .split(' ')
       .where((w) => w.isNotEmpty)
-      .map(
-        (w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
-      )
+      .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
       .join(' ');
 }

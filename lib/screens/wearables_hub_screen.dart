@@ -1,39 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:future_project/models/ble_wearable.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/wearable_data.dart';
 import 'package:future_project/models/wearable_history.dart';
 import 'package:future_project/models/wearables_hub.dart';
+import 'package:future_project/services/ble/ble_device_manager.dart';
 import 'package:future_project/services/wearables_hub_service.dart';
 import 'package:future_project/theme/app_theme.dart';
+import 'package:future_project/widgets/ble_device_management_card.dart';
 
 enum WearablesSyncUiState { idle, syncing, success, failure }
 
 class WearablesHubScreen extends StatefulWidget {
-  const WearablesHubScreen({super.key});
+  final Future<WearablesHubData> Function()? loadData;
+  final Future<WearablePermissionResult> Function()? requestPermissions;
+  final Widget? bleDeviceCard;
+
+  const WearablesHubScreen({
+    super.key,
+    this.loadData,
+    this.requestPermissions,
+    this.bleDeviceCard,
+  });
 
   @override
   State<WearablesHubScreen> createState() => _WearablesHubScreenState();
 }
 
 class _WearablesHubScreenState extends State<WearablesHubScreen> {
-  final _service = WearablesHubService();
+  WearablesHubService? _service;
   WearablesHubData? _data;
   bool _loading = true;
   bool _managingPermissions = false;
   WearablesSyncUiState _syncState = WearablesSyncUiState.idle;
   String? _error;
+  BleDeviceManagerState? _bleState;
+  BleDeviceManager? _bleManager;
 
   @override
   void initState() {
     super.initState();
+    if (widget.loadData == null || widget.requestPermissions == null) {
+      _service = WearablesHubService();
+    }
+    if (widget.bleDeviceCard == null) {
+      _bleManager = BleDeviceManager.production();
+    }
     _load();
+  }
+
+  @override
+  void dispose() {
+    _bleManager?.dispose();
+    super.dispose();
   }
 
   Future<bool> _load({bool showLoading = true}) async {
     if (showLoading && mounted) setState(() => _loading = true);
     try {
-      final data = await _service.load();
+      final data = await (widget.loadData?.call() ?? _service!.load());
       if (mounted) {
         setState(() {
           _data = data;
@@ -72,7 +98,9 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
     if (_managingPermissions) return;
     setState(() => _managingPermissions = true);
     try {
-      final result = await _service.requestPermissions();
+      final result =
+          await (widget.requestPermissions?.call() ??
+              _service!.requestPermissions());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -136,17 +164,33 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
       );
     }
     final unavailable = isConnectionUnavailable(data.source.permissionStatus);
+    final bleHeartRate = _bleState?.latestHeartRateBpm;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Your health data, interpreted in context.',
-          style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
+        _hero(viewportWidth),
+        const SizedBox(height: 28),
+        _sectionHeading(
+          'Connect Your Device',
+          'Bring your health and activity data together in MuscleUp.',
         ),
-        const SizedBox(height: 16),
-        _connectedHealth(data),
-        const SizedBox(height: 14),
-        if (unavailable || !data.source.dataAvailable) ...[
+        const SizedBox(height: 12),
+        _providerGrid(data, viewportWidth),
+        const SizedBox(height: 28),
+        _sectionHeading(
+          'Connected Devices',
+          'Only devices and health sources MuscleUp can confirm appear here.',
+        ),
+        const SizedBox(height: 12),
+        _connectedDevices(data),
+        const SizedBox(height: 28),
+        _sectionHeading(
+          'Your Data at a Glance',
+          'Validated health data from your connected sources.',
+        ),
+        const SizedBox(height: 12),
+        if ((unavailable || !data.source.dataAvailable) &&
+            bleHeartRate == null) ...[
           _CompactEmptyState(
             message: connectionEmptyMessage(data.source.permissionStatus),
             actionLabel: canRequestPermissions(data.source.permissionStatus)
@@ -157,7 +201,7 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
                 : null,
           ),
         ] else ...[
-          _today(data, viewportWidth),
+          _today(data, viewportWidth, bleHeartRateBpm: bleHeartRate),
           const SizedBox(height: 14),
           _coachInsight(data.unifiedCoachContext),
           const SizedBox(height: 14),
@@ -165,11 +209,268 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
           const SizedBox(height: 14),
           _baseline(data),
         ],
-        const SizedBox(height: 14),
-        _manageDevices(data),
+        const SizedBox(height: 30),
+        _motivation(),
       ],
     );
   }
+
+  Widget _hero(double viewportWidth) {
+    final compact = viewportWidth < 560;
+    final copy = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Wearables',
+          style: TextStyle(
+            fontSize: 36,
+            height: 1.05,
+            fontWeight: FontWeight.w900,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Your health. Everywhere with you.',
+          style: TextStyle(
+            fontSize: 20,
+            height: 1.2,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.primaryGreen,
+          ),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Connect your favorite devices to get automatic data, better insights, and a more personalized coaching experience.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
+    );
+    final visual = Container(
+      key: const ValueKey('wearables_hero_visual'),
+      width: compact ? double.infinity : 190,
+      height: compact ? 126 : 176,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFEAF8F1), Color(0xFFD8F0E4)],
+        ),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 90,
+            height: 90,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .88),
+              shape: BoxShape.circle,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x190E6245),
+                  blurRadius: 24,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.watch_rounded,
+            size: 58,
+            color: AppTheme.primaryGreen,
+          ),
+          const Positioned(
+            right: 18,
+            top: 18,
+            child: Icon(
+              Icons.favorite_rounded,
+              size: 24,
+              color: Color(0xFFE26068),
+            ),
+          ),
+          const Positioned(
+            left: 18,
+            bottom: 18,
+            child: Icon(Icons.bolt_rounded, size: 25, color: Color(0xFFE79B3F)),
+          ),
+        ],
+      ),
+    );
+    return Container(
+      padding: EdgeInsets.all(compact ? 20 : 28),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D172D26),
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [copy, const SizedBox(height: 20), visual],
+            )
+          : Row(
+              children: [
+                Expanded(child: copy),
+                const SizedBox(width: 28),
+                visual,
+              ],
+            ),
+    );
+  }
+
+  Widget _sectionHeading(String title, String subtitle) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 4),
+      Text(subtitle, style: _smallStyle),
+    ],
+  );
+
+  Widget _providerGrid(WearablesHubData data, double viewportWidth) {
+    final columns = viewportWidth >= 700
+        ? 3
+        : viewportWidth >= 480
+        ? 2
+        : 1;
+    final gap = 12.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            SizedBox(width: width, child: _manageDevices(data)),
+            for (final provider in const [
+              (
+                'WHOOP',
+                Icons.monitor_heart_outlined,
+                'Recovery, strain, and sleep',
+              ),
+              (
+                'Garmin',
+                Icons.directions_run_rounded,
+                'Activity, workouts, and heart rate',
+              ),
+              (
+                'Fitbit',
+                Icons.grid_view_rounded,
+                'Daily activity, sleep, and heart rate',
+              ),
+              (
+                'Polar',
+                Icons.favorite_border_rounded,
+                'Training and heart-rate data',
+              ),
+              ('Oura', Icons.circle_outlined, 'Sleep, activity, and recovery'),
+            ])
+              SizedBox(
+                width: width,
+                child: _UnavailableProviderCard(
+                  name: provider.$1,
+                  icon: provider.$2,
+                  description: provider.$3,
+                ),
+              ),
+            SizedBox(
+              width: columns == 1 ? width : constraints.maxWidth,
+              child:
+                  widget.bleDeviceCard ??
+                  BleDeviceManagementCard(
+                    manager: _bleManager,
+                    onStateChanged: _onBleStateChanged,
+                  ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _connectedDevices(WearablesHubData data) {
+    final appleConnected =
+        data.source.permissionStatus == WearablePermissionStatus.authorized ||
+        data.source.permissionStatus ==
+            WearablePermissionStatus.partiallyAuthorized;
+    final bleConnected = _bleState?.connectedDevice;
+    if (!appleConnected && bleConnected == null) {
+      return const _CompactEmptyState(
+        message: 'No confirmed health sources or devices are connected yet.',
+      );
+    }
+    return Column(
+      children: [
+        if (appleConnected) _connectedHealth(data),
+        if (appleConnected && bleConnected != null) const SizedBox(height: 10),
+        if (bleConnected != null)
+          _ConnectedBleDeviceCard(
+            device: bleConnected,
+            onDisconnect: _bleManager?.disconnect,
+          ),
+      ],
+    );
+  }
+
+  void _onBleStateChanged(BleDeviceManagerState state) {
+    if (!mounted || identical(_bleState, state)) return;
+    setState(() => _bleState = state);
+  }
+
+  Widget _motivation() => Container(
+    key: const ValueKey('wearables_motivation'),
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: const Color(0xFF123E31),
+      borderRadius: BorderRadius.circular(28),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Better data.\nA stronger you.',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            height: 1.1,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Connect your wearable and let your data guide you towards your next milestone.',
+          style: TextStyle(color: Color(0xFFD9E9E3), height: 1.45),
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 14,
+          runSpacing: 10,
+          children: const [
+            _BenefitItem('More accurate tracking'),
+            _BenefitItem('Personalized coaching'),
+            _BenefitItem('Reach your goals faster'),
+            _BenefitItem('Your data stays private'),
+          ],
+        ),
+      ],
+    ),
+  );
 
   Widget _connectedHealth(WearablesHubData data) => Material(
     color: AppTheme.card,
@@ -223,7 +524,11 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
     ),
   );
 
-  Widget _today(WearablesHubData data, double viewportWidth) {
+  Widget _today(
+    WearablesHubData data,
+    double viewportWidth, {
+    double? bleHeartRateBpm,
+  }) {
     final today = data.today;
     final recovery = data.recoveryContext;
     final items = [
@@ -262,12 +567,26 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
       ),
       _PrimaryMetricData(
         keyName: 'resting_hr',
-        label: 'Resting HR',
+        label: today?.restingHeartRateBpm.value != null
+            ? 'Resting HR'
+            : 'Heart Rate',
         icon: Icons.monitor_heart_outlined,
         color: const Color(0xFFD85C68),
-        value: numberText(today?.restingHeartRateBpm.value, 'bpm'),
-        status: today?.restingHeartRateBpm.status,
-        support: baselineSupport(recovery?.restingHeartRateContext),
+        value: numberText(
+          today?.restingHeartRateBpm.value ??
+              today?.averageHeartRateBpm.value ??
+              bleHeartRateBpm,
+          'bpm',
+        ),
+        status:
+            today?.restingHeartRateBpm.status ??
+            today?.averageHeartRateBpm.status ??
+            (bleHeartRateBpm == null ? null : WearableValidationStatus.valid),
+        support: today?.restingHeartRateBpm.value != null
+            ? baselineSupport(recovery?.restingHeartRateContext)
+            : bleHeartRateBpm != null
+            ? 'Current validated BLE reading'
+            : 'Not enough history yet',
       ),
     ];
     final columns = viewportWidth >= 680 ? 4 : 2;
@@ -285,7 +604,7 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
           crossAxisCount: columns,
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: columns == 4 ? 1.12 : 1.45,
+          mainAxisExtent: 150,
         ),
         itemBuilder: (context, index) => _PrimaryMetricCard(data: items[index]),
       ),
@@ -398,7 +717,7 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
         data.source.permissionStatus ==
             WearablePermissionStatus.partiallyAuthorized;
     return _SectionCard(
-      title: 'Manage Devices',
+      title: 'Apple Health',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -410,15 +729,15 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Apple Health',
-                      style: TextStyle(
+                    Text(
+                      permissionLabel(data.source.permissionStatus),
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    Text(
-                      permissionLabel(data.source.permissionStatus),
+                    const Text(
+                      'Activity, sleep, heart rate, and workouts',
                       style: _smallStyle,
                     ),
                   ],
@@ -441,9 +760,7 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
               if (!unsupported)
                 OutlinedButton(
                   onPressed: _managingPermissions ? null : _requestPermissions,
-                  child: Text(
-                    _managingPermissions ? 'Opening…' : 'Review permissions',
-                  ),
+                  child: Text(_managingPermissions ? 'Opening…' : 'Manage'),
                 ),
               if (canSync)
                 OutlinedButton.icon(
@@ -558,9 +875,10 @@ class _WearablesHubScreenState extends State<WearablesHubScreen> {
                 permissionSupportingText(data.source.permissionStatus),
                 style: _bodyStyle,
               ),
-              if (data.source.statusMessage != null) ...[
+              if (safeStatusMessage(data.source.statusMessage)
+                  case final message?) ...[
                 const SizedBox(height: 8),
-                Text(data.source.statusMessage!, style: _smallStyle),
+                Text(message, style: _smallStyle),
               ],
             ],
           ),
@@ -574,6 +892,17 @@ bool isConnectionUnavailable(WearablePermissionStatus status) =>
     status == WearablePermissionStatus.denied ||
     status == WearablePermissionStatus.unavailable ||
     status == WearablePermissionStatus.unsupportedPlatform;
+
+String? safeStatusMessage(String? message) {
+  if (message == null || message.trim().isEmpty) return null;
+  final technical = RegExp(
+    r'(unimplementederror|exception|stack trace|flutter_reactive_ble)',
+    caseSensitive: false,
+  );
+  return technical.hasMatch(message)
+      ? 'This health source is unavailable right now.'
+      : message.trim();
+}
 
 bool canRequestPermissions(WearablePermissionStatus status) =>
     status != WearablePermissionStatus.unsupportedPlatform &&
@@ -901,9 +1230,13 @@ class _SectionCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.spaceBetween,
           children: [
-            Expanded(child: Text(title, style: _titleStyle)),
+            Text(title, style: _titleStyle),
             ?trailing,
           ],
         ),
@@ -939,6 +1272,133 @@ class _CompactEmptyState extends StatelessWidget {
         Expanded(child: Text(message, style: _bodyStyle)),
         if (actionLabel != null && onAction != null)
           TextButton(onPressed: onAction, child: Text(actionLabel!)),
+      ],
+    ),
+  );
+}
+
+class _UnavailableProviderCard extends StatelessWidget {
+  final String name;
+  final IconData icon;
+  final String description;
+
+  const _UnavailableProviderCard({
+    required this.name,
+    required this.icon,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: ValueKey('wearable_provider_${name.toLowerCase()}'),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppTheme.border),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x08172D26),
+          blurRadius: 16,
+          offset: Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _IconBadge(icon: icon, size: 38),
+            const SizedBox(width: 10),
+            Expanded(child: Text(name, style: _titleStyle)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(description, style: _smallStyle),
+        const SizedBox(height: 12),
+        const Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Not connected',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ),
+            TextButton(onPressed: null, child: Text('Connect')),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _BenefitItem extends StatelessWidget {
+  final String label;
+  const _BenefitItem(this.label);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 240,
+    child: Row(
+      children: [
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 17,
+          color: Color(0xFF7DD5AC),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ConnectedBleDeviceCard extends StatelessWidget {
+  final BleDiscoveredDevice device;
+  final VoidCallback? onDisconnect;
+
+  const _ConnectedBleDeviceCard({
+    required this.device,
+    required this.onDisconnect,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('connected_ble_device'),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppTheme.border),
+    ),
+    child: Row(
+      children: [
+        const _IconBadge(icon: Icons.bluetooth_connected, size: 42),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                device.name,
+                overflow: TextOverflow.ellipsis,
+                style: _titleStyle,
+              ),
+              Text('Connected · ${device.id}', style: _smallStyle),
+            ],
+          ),
+        ),
+        TextButton(onPressed: onDisconnect, child: const Text('Disconnect')),
       ],
     ),
   );

@@ -5,10 +5,12 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   audioplayers_windows
+  bluetooth_low_energy_windows
   desktop_drop
   file_selector_windows
   flutter_secure_storage_windows
   media_kit_libs_windows_audio
+  permission_handler_windows
   record_windows
   url_launcher_windows
 )

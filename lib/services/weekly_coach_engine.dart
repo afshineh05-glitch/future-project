@@ -79,6 +79,9 @@ class WeeklyCoachEngine {
     final priorCompleted = previousWorkouts
         .where((e) => e.status == 'completed')
         .length;
+    final missedPlannedSessions = currentWorkouts
+        .where((e) => e.status != 'completed')
+        .length;
     final evidence = <String>[];
 
     final sleepLow =
@@ -100,10 +103,15 @@ class WeeklyCoachEngine {
         'Average sleep was ${(sleep - baselineSleep).round()} minutes versus personal baseline.',
       );
     }
-    if (input.workoutSourceAvailable) {
+    if (input.workoutSourceAvailable && currentWorkouts.isNotEmpty) {
       evidence.add(
-        '$completed completed sessions versus $priorCompleted the previous week.',
+        '$completed of ${currentWorkouts.length} observed training sessions were completed.',
       );
+      if (previousWorkouts.isNotEmpty) {
+        evidence.add(
+          'The previous week had $priorCompleted of ${previousWorkouts.length} observed sessions completed.',
+        );
+      }
     }
     if (restingHr != null && baselineHr != null) {
       evidence.add(
@@ -116,7 +124,7 @@ class WeeklyCoachEngine {
       mission = WeeklyMissionType.protectRecovery;
     } else if (sleepLow) {
       mission = WeeklyMissionType.improveTrainingNightSleep;
-    } else if (input.workoutSourceAvailable && completed < 2) {
+    } else if (input.workoutSourceAvailable && missedPlannedSessions > 0) {
       mission = WeeklyMissionType.improveWorkoutConsistency;
     } else if (loadHigh) {
       mission = WeeklyMissionType.reduceActivityLoad;
@@ -136,7 +144,14 @@ class WeeklyCoachEngine {
         mission == WeeklyMissionType.maintainSuccessfulBehavior) {
       mission = input.previousPlan!.missionType;
     }
-    final guidance = _guidance(mission, input.primaryGoal);
+    final guidance = _guidance(
+      mission,
+      input.primaryGoal,
+      hasPreviousPlan: input.previousPlan != null,
+      adjustActions:
+          input.previousPlan?.missionType == mission &&
+          followUp.$1 == WeeklyMissionOutcome.unchanged,
+    );
     final improvedSleep =
         sleep != null && previousSleep != null && sleep >= previousSleep + 15;
     final improvedTraining =
@@ -156,7 +171,7 @@ class WeeklyCoachEngine {
         ? 'Sleep was below your personal baseline.'
         : hrHigh
         ? 'Recovery signals were less stable than your personal baseline.'
-        : input.workoutSourceAvailable && completed < 2
+        : input.workoutSourceAvailable && missedPlannedSessions > 0
         ? 'Workout consistency was the clearest available constraint.'
         : 'No clear limiting pattern was supported by the available data.';
     final motivation = improvedTraining
@@ -227,16 +242,37 @@ class WeeklyCoachEngine {
             'Last week\'s mission cannot be evaluated reliably because training history is unavailable.',
           );
         }
-        current = _workouts(
-          input.workouts,
-          from,
-          to,
-        ).where((e) => e.status == 'completed').length.toDouble();
-        older = _workouts(
-          input.workouts,
-          priorFrom,
-          from,
-        ).where((e) => e.status == 'completed').length.toDouble();
+        final currentWorkouts = _workouts(input.workouts, from, to);
+        final olderWorkouts = _workouts(input.workouts, priorFrom, from);
+        if (currentWorkouts.isEmpty ||
+            (prior.missionType == WeeklyMissionType.improveWorkoutConsistency &&
+                olderWorkouts.isEmpty)) {
+          return (
+            WeeklyMissionOutcome.insufficientData,
+            'Last week\'s mission cannot be evaluated reliably without observed training sessions in both comparison weeks.',
+          );
+        }
+        final currentCompleted = currentWorkouts
+            .where((e) => e.status == 'completed')
+            .length;
+        final olderCompleted = olderWorkouts
+            .where((e) => e.status == 'completed')
+            .length;
+        final outcome =
+            prior.missionType == WeeklyMissionType.maintainSuccessfulBehavior
+            ? currentCompleted == currentWorkouts.length
+                  ? WeeklyMissionOutcome.success
+                  : currentCompleted > 0
+                  ? WeeklyMissionOutcome.partialImprovement
+                  : WeeklyMissionOutcome.unchanged
+            : currentCompleted == currentWorkouts.length &&
+                  olderCompleted < olderWorkouts.length
+            ? WeeklyMissionOutcome.success
+            : currentCompleted * olderWorkouts.length >
+                  olderCompleted * currentWorkouts.length
+            ? WeeklyMissionOutcome.partialImprovement
+            : WeeklyMissionOutcome.unchanged;
+        return (outcome, _followUpMessage(prior, outcome));
     }
     if (current == null || older == null) {
       return (
@@ -257,25 +293,77 @@ class WeeklyCoachEngine {
         : delta > 0
         ? WeeklyMissionOutcome.partialImprovement
         : WeeklyMissionOutcome.unchanged;
-    final message = switch (outcome) {
-      WeeklyMissionOutcome.success =>
-        'Last week we focused on ${prior.missionTitle.toLowerCase()}. The measured outcome improved, so keep this behavior.',
-      WeeklyMissionOutcome.partialImprovement =>
-        'Last week\'s mission showed partial improvement. Keep the same direction while making the actions easier to repeat.',
-      WeeklyMissionOutcome.unchanged =>
-        'Last week\'s mission has not improved yet. Keep the focus another week unless a clearer priority takes over.',
-      WeeklyMissionOutcome.insufficientData => '',
-    };
-    return (outcome, message);
+    return (outcome, _followUpMessage(prior, outcome));
   }
+
+  String _followUpMessage(
+    WeeklyCoachPlan prior,
+    WeeklyMissionOutcome outcome,
+  ) => switch (outcome) {
+    WeeklyMissionOutcome.success =>
+      'Last week we focused on ${prior.missionTitle.toLowerCase()}. The measured outcome improved, so keep this behavior.',
+    WeeklyMissionOutcome.partialImprovement =>
+      'Last week\'s mission showed partial improvement. Continue the same priority while the pattern becomes more consistent.',
+    WeeklyMissionOutcome.unchanged =>
+      'Last week\'s mission has not improved yet. Keep the priority, but adjust the actions rather than repeating the same approach.',
+    WeeklyMissionOutcome.insufficientData =>
+      'Last week\'s mission cannot be evaluated reliably with the available data.',
+  };
 
   (String, String, List<String>) _guidance(
     WeeklyMissionType type,
-    String goal,
-  ) {
+    String goal, {
+    required bool hasPreviousPlan,
+    required bool adjustActions,
+  }) {
     final goalText = goal.trim().isEmpty
         ? 'your current goal'
         : goal.replaceAll('_', ' ');
+    if (adjustActions) {
+      return switch (type) {
+        WeeklyMissionType.protectRecovery => (
+          'Protect recovery this week',
+          'Recovery is still the main priority, so this week narrows the approach to the easiest repeatable protections for $goalText.',
+          [
+            'Choose one lower-load day and protect it from optional extra work.',
+            'Set one consistent wind-down reminder for training nights.',
+          ],
+        ),
+        WeeklyMissionType.improveTrainingNightSleep => (
+          'Improve sleep around training',
+          'Sleep remains the clearest constraint, so this week simplifies the approach instead of repeating every prior action.',
+          [
+            'Choose one training night to start the wind-down routine 30 minutes earlier.',
+            'Prepare the bedtime reminder before that training day begins.',
+          ],
+        ),
+        WeeklyMissionType.improveWorkoutConsistency => (
+          'Build workout consistency',
+          'Consistency remains the main opportunity, so this week reduces friction instead of repeating the same approach.',
+          [
+            'Protect one realistic training window before adding another.',
+            'Prepare the essential session steps before that training window.',
+            'Record what blocked the session if it is not completed.',
+          ],
+        ),
+        WeeklyMissionType.reduceActivityLoad => (
+          'Keep activity load manageable',
+          'Activity load remains the priority, so this week targets the clearest optional source rather than changing the whole routine.',
+          [
+            'Identify one source of optional extra activity and keep it easy this week.',
+            'Preserve one lower-load day without adding conditioning.',
+          ],
+        ),
+        WeeklyMissionType.maintainSuccessfulBehavior => (
+          'Repeat last week’s consistency',
+          'The pattern was not maintained yet, so this week makes one working behavior easier to repeat for $goalText.',
+          [
+            'Choose the single routine that was easiest to complete and schedule it first.',
+            'Record whether that routine was completed so the next review has clear evidence.',
+          ],
+        ),
+      };
+    }
     return switch (type) {
       WeeklyMissionType.protectRecovery => (
         'Protect recovery this week',
@@ -314,8 +402,12 @@ class WeeklyCoachEngine {
         ],
       ),
       WeeklyMissionType.maintainSuccessfulBehavior => (
-        'Repeat last week’s consistency',
-        'The available data does not support changing direction; repeating a working behavior best supports $goalText.',
+        hasPreviousPlan
+            ? 'Repeat last week’s consistency'
+            : 'Establish a steady weekly rhythm',
+        hasPreviousPlan
+            ? 'The available data does not support changing direction; repeating a working behavior best supports $goalText.'
+            : 'There is not enough prior history for a confident change, so a steady, observable week best supports $goalText.',
         [
           'Keep the same realistic training windows.',
           'Protect the sleep routine that supported last week.',

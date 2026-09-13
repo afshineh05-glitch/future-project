@@ -138,6 +138,13 @@ class WeeklyCoachService {
   Future<WeeklyCoachPlan?> loadCurrentPlan() =>
       _store.loadForWeek(_weekStart(_clock()));
 
+  /// Returns this week's canonical plan, generating it only when it does not
+  /// already exist. This keeps all Weekly Coach surfaces on one persisted row.
+  Future<WeeklyCoachPlan> loadOrGenerateCurrentPlan() async {
+    final current = await loadCurrentPlan();
+    return current ?? generateAndSave();
+  }
+
   Future<WeeklyCoachPlan> generateAndSave() async {
     if (_store.currentUserId == null) {
       throw StateError('Sign in to use Weekly Coach.');

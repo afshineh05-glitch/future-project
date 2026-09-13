@@ -6,6 +6,7 @@ import 'package:future_project/screens/body_progress_screen.dart';
 import 'package:future_project/screens/nutrition_home_screen.dart';
 import 'package:future_project/screens/todays_coach_screen.dart';
 import 'package:future_project/screens/training_plan_screen.dart';
+import 'package:future_project/screens/weekly_coach_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 
 class IntelligentCoachScreen extends StatefulWidget {
@@ -127,6 +128,21 @@ class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
     );
   }
 
+  void _openWeeklyCoach() {
+    if (!_foundationCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete My Foundation to unlock Weekly Coach.'),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const WeeklyCoachScreen()),
+    );
+  }
+
   void _openBodyProgress() {
     if (!_foundationCompleted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -179,6 +195,14 @@ class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
               subtitle: 'Daily guidance based on your progress.',
               locked: !_foundationCompleted,
               onTap: _openTodaysCoach,
+            ),
+            const SizedBox(height: 14),
+            _CoachModuleCard(
+              icon: Icons.calendar_view_week_outlined,
+              title: 'Weekly Coach',
+              subtitle: 'One priority and a practical plan for this week.',
+              locked: !_foundationCompleted,
+              onTap: _openWeeklyCoach,
             ),
             const SizedBox(height: 14),
             _CoachModuleCard(

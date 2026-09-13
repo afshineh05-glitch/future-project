@@ -72,7 +72,8 @@ void main() {
     );
     expect(result.dataCoverage.wearableDays, 0);
     expect(result.dataCoverage.summary, contains('unavailable'));
-    expect(result.missionType, WeeklyMissionType.improveWorkoutConsistency);
+    expect(result.missionType, WeeklyMissionType.maintainSuccessfulBehavior);
+    expect(result.evidence.single, contains('1 of 1 observed'));
   });
 
   test('compares completed week with previous week and personal baseline', () {
@@ -187,7 +188,7 @@ void main() {
       ),
     );
     expect(result.previousMissionOutcome, WeeklyMissionOutcome.unchanged);
-    expect(result.followUpMessage, contains('another week'));
+    expect(result.followUpMessage, contains('adjust the actions'));
   });
 
   test('previous mission is insufficient when its source is missing', () {

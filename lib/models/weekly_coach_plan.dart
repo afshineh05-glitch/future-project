@@ -13,6 +13,15 @@ enum WeeklyMissionOutcome {
   insufficientData,
 }
 
+enum WeeklyFollowUpDirection {
+  establishPriority,
+  continuePriority,
+  adjustPriority,
+  replacePriority,
+  reinforceProgress,
+  insufficientEvidence,
+}
+
 class WeeklyCoachDataCoverage {
   final int wearableDays;
   final int expectedWearableDays;
@@ -27,7 +36,7 @@ class WeeklyCoachDataCoverage {
   });
 
   String get summary => wearableDays == 0
-      ? 'Wearable data was unavailable; guidance uses reliable training history.'
+      ? 'Wearable data was unavailable; guidance uses other available validated context.'
       : 'Based on $wearableDays of $expectedWearableDays days of wearable data.';
 }
 
@@ -69,6 +78,32 @@ class WeeklyCoachPlan {
     required this.evidence,
     required this.generatedAt,
   }) : assert(actionItems.length <= 3);
+
+  WeeklyFollowUpDirection get followUpDirection {
+    final previousTitle = previousMissionTitle?.trim();
+    if (previousTitle == null || previousTitle.isEmpty) {
+      return WeeklyFollowUpDirection.establishPriority;
+    }
+    final samePriority =
+        previousTitle.toLowerCase() == missionTitle.trim().toLowerCase();
+    return switch (previousMissionOutcome) {
+      WeeklyMissionOutcome.success => WeeklyFollowUpDirection.reinforceProgress,
+      WeeklyMissionOutcome.partialImprovement =>
+        samePriority
+            ? WeeklyFollowUpDirection.continuePriority
+            : WeeklyFollowUpDirection.replacePriority,
+      WeeklyMissionOutcome.unchanged =>
+        samePriority
+            ? WeeklyFollowUpDirection.adjustPriority
+            : WeeklyFollowUpDirection.replacePriority,
+      WeeklyMissionOutcome.insufficientData =>
+        !samePriority &&
+                missionType != WeeklyMissionType.maintainSuccessfulBehavior &&
+                evidence.isNotEmpty
+            ? WeeklyFollowUpDirection.replacePriority
+            : WeeklyFollowUpDirection.insufficientEvidence,
+    };
+  }
 
   static String dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
