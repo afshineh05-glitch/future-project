@@ -39,6 +39,8 @@ class ExerciseCatalogValidationService {
     'calf_raise',
     'locomotion',
     'stretch',
+    'olympic_lift',
+    'plyometric',
   };
   static const Set<String> equipmentValues = <String>{
     'bodyweight',

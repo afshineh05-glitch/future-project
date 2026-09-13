@@ -10,11 +10,11 @@ $items = @($catalog.exercises)
 $duplicateGroups = @($items | Group-Object normalized_name | Where-Object Count -gt 1)
 $unresolved = @($items | Where-Object {
   -not $_.source_name -or -not $_.canonical_id -or -not $_.slug -or
-  $_.validation_status -in @('needs_review','duplicate_candidate','invalid')
+  $_.validation_status -in @('needs_review','needs_human_review','awaiting_video_license','invalid_identity','duplicate_candidate','invalid')
 })
 $pending = @($items | Where-Object metadata_status -in @('metadata_pending','verified'))
 $validatedMetadata = @($items | Where-Object metadata_status -eq 'metadata_validated')
-$reviewMetadata = @($items | Where-Object metadata_status -eq 'needs_review')
+$reviewMetadata = @($items | Where-Object metadata_status -in @('needs_review','needs_human_review','awaiting_video_license','invalid_identity'))
 $missingAssets = @($items | Where-Object {
   ($_.male_anatomy_asset -and -not (Test-Path -LiteralPath $_.male_anatomy_asset)) -or
   ($_.female_anatomy_asset -and -not (Test-Path -LiteralPath $_.female_anatomy_asset))

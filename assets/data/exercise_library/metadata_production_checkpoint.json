@@ -1,13 +1,13 @@
 ﻿{
-    "generator_version":  "muscleup_metadata_author_1",
-    "reviewer_version":  "muscleup_metadata_reviewer_1",
+    "generator_version":  "muscleup_review_research_1",
+    "reviewer_version":  "muscleup_review_verifier_1",
     "catalog_version":  1,
     "total_records":  412,
-    "completed_records":  327,
+    "completed_records":  392,
     "pending_records":  0,
-    "review_records":  85,
+    "review_records":  20,
     "failed_records":  0,
-    "last_completed_canonical_id":  "mu_ex_zottman_curl",
-    "current_batch":  21,
-    "updated_at":  "2026-09-13T00:22:49.2765600Z"
+    "last_completed_canonical_id":  "mu_ex_single_arm_overhead_cable_extension",
+    "current_batch":  10,
+    "updated_at":  "2026-09-13T00:36:34.5773226Z"
 }

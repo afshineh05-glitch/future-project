@@ -223,7 +223,7 @@ void main() {
     final repository = ExerciseCatalogRepository((_) async => catalogText);
     final coach = CoachExerciseCatalog(repository);
     final selected = await coach.selectableExercises();
-    expect(selected, hasLength(327));
+    expect(selected, hasLength(392));
     expect(
       selected.every(
         (item) =>
@@ -305,11 +305,13 @@ void main() {
     expect(ordered.last, 'mu_ex_zottman_curl');
     expect(
       exercises.where((item) => item.metadataStatus == 'metadata_validated'),
-      hasLength(327),
+      hasLength(392),
     );
     expect(
-      exercises.where((item) => item.metadataStatus == 'needs_review'),
-      hasLength(85),
+      exercises.where(
+        (item) => item.metadataStatus == 'awaiting_video_license',
+      ),
+      hasLength(20),
     );
     expect(
       exercises.where((item) => item.metadataStatus == 'metadata_pending'),
@@ -349,7 +351,7 @@ void main() {
         } else {
           expect(item.defaultRepsMin, lessThanOrEqualTo(item.defaultRepsMax!));
         }
-        expect(item.metadataVersion, 1);
+        expect(item.metadataVersion, anyOf(1, 2));
         expect(item.metadataSources, isNotEmpty);
         expect(item.authoredAt, isNotNull);
         expect(item.reviewedAt, isNotNull);
@@ -374,19 +376,56 @@ void main() {
                 ).readAsStringSync(),
               )
               as Map<String, dynamic>;
-      expect(checkpoint['completed_records'], 327);
+      expect(checkpoint['completed_records'], 392);
       expect(checkpoint['pending_records'], 0);
-      expect(checkpoint['review_records'], 85);
+      expect(checkpoint['review_records'], 20);
       expect(checkpoint['failed_records'], 0);
-      expect(checkpoint['current_batch'], 21);
-      expect(checkpoint['last_completed_canonical_id'], 'mu_ex_zottman_curl');
+      expect(checkpoint['current_batch'], 10);
+      expect(
+        checkpoint['last_completed_canonical_id'],
+        'mu_ex_single_arm_overhead_cable_extension',
+      );
       expect(
         checkpoint['generator_version'],
         isNot(checkpoint['reviewer_version']),
       );
-      expect(queue['unresolved'], hasLength(85));
+      expect(queue['unresolved'], hasLength(20));
     },
   );
+
+  test('two-pass resolutions preserve the original 327 validated records', () {
+    expect(
+      exercises.where(
+        (item) =>
+            item.metadataStatus == 'metadata_validated' &&
+            item.metadataVersion == 1,
+      ),
+      hasLength(327),
+    );
+    expect(
+      exercises.where(
+        (item) =>
+            item.metadataStatus == 'metadata_validated' &&
+            item.metadataVersion == 2,
+      ),
+      hasLength(65),
+    );
+  });
+
+  test('ambiguous awaiting-video identities remain Coach-ineligible', () async {
+    final ambiguous = exercises.singleWhere(
+      (item) => item.canonicalId == 'mu_ex_sled_push',
+    );
+    expect(ambiguous.metadataStatus, 'awaiting_video_license');
+    expect(ambiguous.isCoachSelectable, isFalse);
+    final coach = CoachExerciseCatalog(
+      ExerciseCatalogRepository((_) async => catalogText),
+    );
+    expect(
+      await coach.resolveSelection(canonicalId: ambiguous.canonicalId),
+      isNull,
+    );
+  });
 
   test('identities and protected assets remain intact', () {
     expect(exercises.map((item) => item.canonicalId).toSet(), hasLength(412));

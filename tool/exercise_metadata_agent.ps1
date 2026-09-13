@@ -3,7 +3,8 @@ param(
   [string]$CheckpointPath = 'assets/data/exercise_library/metadata_production_checkpoint.json',
   [string]$ReviewQueuePath = 'assets/data/exercise_library/review_queue.json',
   [int]$BatchSize = 20,
-  [int]$MaxBatches = 0
+  [int]$MaxBatches = 0,
+  [switch]$DefinitionsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,9 +19,7 @@ $sources = @(
 $manualNames = @(
   'Abdominals Stretch Variation Four','Abdominals Stretch Variation One',
   'Abdominals Stretch Variation Three','Abdominals Stretch Variation Two',
-  'Pendulum Squat / V-Squat','Sled Push/Pull','Man Maker','Wall Ball',
-  'Cuban Press','Swim Kick Drill','Swim Pull Drill','Neck Curl','Neck Extension',
-  'Behind-the-Neck Press'
+  'Pendulum Squat / V-Squat','Sled Push/Pull','Swim Kick Drill','Swim Pull Drill'
 )
 
 function Strings([object]$value) { return [object[]]@($value) }
@@ -60,30 +59,45 @@ function Draft([object]$exercise) {
     $d.category='mobility'; $d.movement_pattern=if($n -match 'stretch'){'stretch'}else{'mobility'}
     $d.exercise_type='mobility'; $d.mechanics='isolation'; $d.training_goals=@('mobility')
   }
-  elseif ($n -match 'bike|trainer|treadmill|running|run$|walking|swim|rower|elliptical|stair|ski erg|versaclimber|jumping jack|jump rope') {
+  elseif ($n -match 'bike|cycling|ride|trainer|treadmill|running|run$|walking|hiking|hill climb|swim|rower|elliptical|stair|ski erg|versaclimber|jumping jack|jump rope|battle rope|shadow boxing') {
     $d.category='conditioning'; $d.movement_pattern='cardio'; $d.exercise_type='cardio'; $d.mechanics='cyclical'; $d.training_goals=@('cardiovascular_endurance','work_capacity')
   }
   elseif ($n -match 'carry|farmer') { $d.movement_pattern='carry'; $d.primary_muscles=@('forearms','traps'); $d.secondary_muscles=@('glutes'); $d.stabilizer_muscles=@('core','spinal_erectors') }
+  elseif ($n -match 'snatch|clean|jerk|thruster|high pull') { $d.movement_pattern='olympic_lift'; $d.category='power'; $d.body_region='full_body'; $d.primary_muscles=@('glutes','quadriceps'); $d.secondary_muscles=@('hamstrings','traps','anterior_deltoids','triceps'); $d.stabilizer_muscles=@('core','spinal_erectors','forearms'); $d.training_goals=@('power','strength') }
+  elseif ($n -match 'box jump|burpee|wall ball') { $d.movement_pattern='plyometric'; $d.category='conditioning'; $d.body_region='full_body'; $d.primary_muscles=@('quadriceps','glutes'); $d.secondary_muscles=@('hamstrings','calves','anterior_deltoids','triceps'); $d.stabilizer_muscles=@('core'); $d.training_goals=@('power','work_capacity') }
   elseif ($n -match 'pallof|anti.rotation') { $d.movement_pattern='anti_rotation'; $d.primary_muscles=@('core','obliques'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('glutes') }
   elseif ($n -match 'russian twist|wood.?chop|rotation') { $d.movement_pattern='rotation'; $d.primary_muscles=@('obliques'); $d.secondary_muscles=@('core'); $d.stabilizer_muscles=@('glutes') }
   elseif ($n -match 'plank|dead bug|bird dog|crunch|sit.?up|leg raise|knee raise|ab wheel|mountain climber') { $d.movement_pattern='core'; $d.body_region='core'; $d.primary_muscles=@('core'); $d.secondary_muscles=@('obliques'); $d.stabilizer_muscles=@('glutes','anterior_deltoids') }
-  elseif ($n -match 'calf raise|calves') { $d.movement_pattern='calf_raise'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('calves'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'toes.to.bar|v-up') { $d.movement_pattern='flexion'; $d.body_region='core'; $d.primary_muscles=@('core','hip_flexors'); $d.secondary_muscles=@('obliques'); $d.stabilizer_muscles=@('forearms') }
+  elseif ($n -match 'side bend') { $d.movement_pattern='flexion'; $d.body_region='core'; $d.mechanics='isolation'; $d.primary_muscles=@('obliques'); $d.secondary_muscles=@('core'); $d.stabilizer_muscles=@('spinal_erectors') }
+  elseif ($n -match 'calf raise|calf press|calves') { $d.movement_pattern='calf_raise'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('calves'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('back') }
   elseif ($n -match 'tibialis') { $d.movement_pattern='isolation'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('tibialis_anterior'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('front') }
+  elseif ($n -match 'neck curl') { $d.movement_pattern='flexion'; $d.body_region='neck'; $d.mechanics='isolation'; $d.primary_muscles=@('neck_flexors'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('front') }
+  elseif ($n -match 'neck extension') { $d.movement_pattern='extension'; $d.body_region='neck'; $d.mechanics='isolation'; $d.primary_muscles=@('neck_extensors'); $d.secondary_muscles=@('traps'); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'front raise') { $d.movement_pattern='flexion'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('anterior_deltoids'); $d.secondary_muscles=@('serratus_anterior'); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('front') }
   elseif ($n -match 'external rotation') { $d.movement_pattern='rotation'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('rotator_cuff'); $d.secondary_muscles=@('posterior_deltoids'); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('back') }
   elseif ($n -match 'lateral raise|side raise|hip abduction|clamshell|monster walk|kickback') { $d.movement_pattern='abduction'; $d.mechanics='isolation'; if($n -match 'hip|clamshell|monster|kickback'){$d.body_region='lower_body';$d.primary_muscles=@('abductors','glutes');$d.secondary_muscles=@()}else{$d.body_region='upper_body';$d.primary_muscles=@('lateral_deltoids');$d.secondary_muscles=@('anterior_deltoids')};$d.stabilizer_muscles=@('core') }
   elseif ($n -match 'adduction') { $d.movement_pattern='adduction'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('adductors'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('front') }
   elseif ($n -match 'lunge|split squat|step.?up') { $d.movement_pattern='lunge'; $d.body_region='lower_body'; $d.primary_muscles=@('quadriceps','glutes'); $d.secondary_muscles=@('hamstrings'); $d.stabilizer_muscles=@('core','adductors','abductors') }
+  elseif ($n -match 'step.down') { $d.movement_pattern='squat'; $d.body_region='lower_body'; $d.laterality='unilateral'; $d.primary_muscles=@('quadriceps','glutes'); $d.secondary_muscles=@('hamstrings'); $d.stabilizer_muscles=@('core','abductors','adductors') }
+  elseif ($n -match 'wall sit') { $d.movement_pattern='squat'; $d.body_region='lower_body'; $d.exercise_type='isometric'; $d.primary_muscles=@('quadriceps'); $d.secondary_muscles=@('glutes'); $d.stabilizer_muscles=@('core') }
   elseif ($n -match 'squat|leg press') { $d.movement_pattern='squat'; $d.body_region='lower_body'; $d.primary_muscles=@('quadriceps','glutes'); $d.secondary_muscles=@('hamstrings','adductors'); $d.stabilizer_muscles=@('core','spinal_erectors') }
   elseif ($n -match 'deadlift|romanian|good morning|hip hinge|swing|pull.through|back extension|hyperextension|hip thrust|glute bridge') { $d.movement_pattern='hip_hinge'; $d.body_region='lower_body'; $d.primary_muscles=@('glutes','hamstrings'); $d.secondary_muscles=@('spinal_erectors'); $d.stabilizer_muscles=@('core','forearms'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'rack pull|frog pump') { $d.movement_pattern='hip_hinge'; $d.body_region='lower_body'; $d.primary_muscles=@('glutes','hamstrings'); $d.secondary_muscles=@('spinal_erectors'); $d.stabilizer_muscles=@('core','forearms'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'dead hang') { $d.movement_pattern='vertical_pull'; $d.body_region='upper_body'; $d.exercise_type='isometric'; $d.primary_muscles=@('lats','forearms'); $d.secondary_muscles=@('upper_back'); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('back') }
   elseif ($n -match 'pull-up|pull up|chin-up|chin up|pulldown|pull down|pullover') { $d.movement_pattern='vertical_pull'; $d.body_region='upper_body'; $d.primary_muscles=@('lats'); $d.secondary_muscles=@('biceps','upper_back'); $d.stabilizer_muscles=@('core','forearms'); $d.required_anatomy_views=@('back') }
-  elseif ($n -match 'row|face pull|reverse fly|rear delt') { $d.movement_pattern='horizontal_pull'; $d.body_region='upper_body'; $d.primary_muscles=@('upper_back','lats'); $d.secondary_muscles=@('posterior_deltoids','biceps'); $d.stabilizer_muscles=@('core','spinal_erectors'); $d.required_anatomy_views=@('back') }
-  elseif ($n -match 'overhead press|shoulder press|military press|push press|handstand') { $d.movement_pattern='vertical_push'; $d.body_region='upper_body'; $d.primary_muscles=@('anterior_deltoids'); $d.secondary_muscles=@('lateral_deltoids','triceps'); $d.stabilizer_muscles=@('core','traps'); $d.required_anatomy_views=@('front') }
-  elseif ($n -match 'bench press|chest press|push-up|push up|chest fly|flye|dip|chest pass') { $d.movement_pattern='horizontal_push'; $d.body_region='upper_body'; $d.primary_muscles=@('chest'); $d.secondary_muscles=@('anterior_deltoids','triceps'); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('front') }
-  elseif ($n -match 'triceps|pushdown|skull crusher') { $d.movement_pattern='extension'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('triceps'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('anterior_deltoids'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'row|face pull|reverse fly|reverse pec deck|rear delt') { $d.movement_pattern='horizontal_pull'; $d.body_region='upper_body'; $d.primary_muscles=@('upper_back','lats'); $d.secondary_muscles=@('posterior_deltoids','biceps'); $d.stabilizer_muscles=@('core','spinal_erectors'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'overhead press|shoulder press|military press|push press|handstand|arnold press|z press|landmine press|behind.the.neck press') { $d.movement_pattern='vertical_push'; $d.body_region='upper_body'; $d.primary_muscles=@('anterior_deltoids'); $d.secondary_muscles=@('lateral_deltoids','triceps'); $d.stabilizer_muscles=@('core','traps'); $d.required_anatomy_views=@('front') }
+  elseif ($n -match 'bench press|chest press|floor press|push-up|push up|fly|flye|dip|chest pass') { $d.movement_pattern='horizontal_push'; $d.body_region='upper_body'; $d.primary_muscles=@('chest'); $d.secondary_muscles=@('anterior_deltoids','triceps'); $d.stabilizer_muscles=@('core'); $d.required_anatomy_views=@('front') }
+  elseif ($n -match 'triceps|tricep|pushdown|push down|skullcrusher|skull crusher|jm press|tate press|overhead cable extension') { $d.movement_pattern='extension'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('triceps'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('anterior_deltoids'); $d.required_anatomy_views=@('back') }
   elseif ($n -match 'leg extension') { $d.movement_pattern='extension'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('quadriceps'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('front') }
   elseif ($n -match 'leg curl|hamstring curl|nordic') { $d.movement_pattern='flexion'; $d.body_region='lower_body'; $d.mechanics='isolation'; $d.primary_muscles=@('hamstrings'); $d.secondary_muscles=@('calves'); $d.stabilizer_muscles=@('glutes'); $d.required_anatomy_views=@('back') }
   elseif ($n -match 'curl') { $d.movement_pattern='flexion'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('biceps'); $d.secondary_muscles=@('forearms'); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('front') }
   elseif ($n -match 'shrug') { $d.movement_pattern='isolation'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('traps'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@('forearms'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'wrist extension|wrist roller|plate pinch') { $d.movement_pattern='isolation'; $d.body_region='upper_body'; $d.mechanics='isolation'; $d.primary_muscles=@('forearms'); $d.secondary_muscles=@(); $d.stabilizer_muscles=@(); $d.required_anatomy_views=@('front') }
+  elseif ($n -match 'superman') { $d.movement_pattern='extension'; $d.body_region='posterior_chain'; $d.primary_muscles=@('spinal_erectors'); $d.secondary_muscles=@('glutes','hamstrings'); $d.stabilizer_muscles=@('upper_back'); $d.required_anatomy_views=@('back') }
+  elseif ($n -match 'turkish get-up|windmill|man maker|cuban press') { $d.movement_pattern='rotation'; $d.body_region='full_body'; $d.primary_muscles=@('core','obliques'); $d.secondary_muscles=@('glutes','anterior_deltoids'); $d.stabilizer_muscles=@('rotator_cuff','triceps'); $d.required_anatomy_views=@('front','back') }
+  elseif ($n -match 'sled pull') { $d.movement_pattern='locomotion'; $d.category='conditioning'; $d.body_region='full_body'; $d.primary_muscles=@('quadriceps','glutes'); $d.secondary_muscles=@('hamstrings','calves'); $d.stabilizer_muscles=@('core','forearms'); $d.training_goals=@('strength','work_capacity') }
   else { return @{ review_reason='no_unique_reviewed_movement_rule' } }
 
   if ($d.primary_muscles.Count -eq 0) {
@@ -137,6 +151,8 @@ function Save-State([object]$catalog,[object[]]$queue,[int]$batch,[string]$last)
   [ordered]@{generator_version=$generatorVersion;reviewer_version=$reviewerVersion;catalog_version=$catalogVersion;total_records=412;completed_records=$validated;pending_records=$pending;review_records=$review;failed_records=0;last_completed_canonical_id=$last;current_batch=$batch;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content -LiteralPath $CheckpointPath -Encoding utf8
   [ordered]@{duplicate_candidates=@();unresolved=[object[]]$queue;unknown_muscles=@();ambiguous_video_matches=@()}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $ReviewQueuePath -Encoding utf8
 }
+
+if($DefinitionsOnly){return}
 
 $catalog=Get-Content -LiteralPath $CatalogPath -Raw|ConvertFrom-Json
 foreach($exercise in $catalog.exercises){
