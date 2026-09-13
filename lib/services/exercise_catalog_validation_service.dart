@@ -29,6 +29,16 @@ class ExerciseCatalogValidationService {
     'core',
     'cardio',
     'mobility',
+    'carry',
+    'rotation',
+    'anti_rotation',
+    'flexion',
+    'extension',
+    'abduction',
+    'adduction',
+    'calf_raise',
+    'locomotion',
+    'stretch',
   };
   static const Set<String> equipmentValues = <String>{
     'bodyweight',
@@ -37,6 +47,26 @@ class ExerciseCatalogValidationService {
     'bench',
     'pull_up_bar',
     'cardio_machine',
+    'cable',
+    'machine',
+    'resistance_band',
+    'kettlebell',
+    'ez_bar',
+    'smith_machine',
+    'trap_bar',
+    'landmine',
+    'medicine_ball',
+    'stability_ball',
+    'bosu',
+    'plate',
+    'sled',
+    'battle_rope',
+    'suspension_trainer',
+    'exercise_mat',
+    'box',
+    'step',
+    'dip_station',
+    'foam_roller',
   };
 
   CatalogValidationReport validate(List<CanonicalExercise> exercises) {
@@ -67,7 +97,8 @@ class ExerciseCatalogValidationService {
           'Canonical ID does not match the stable slug rule.',
         );
       }
-      if (item.metadataStatus == 'verified') {
+      if (item.metadataStatus == 'verified' ||
+          item.metadataStatus == 'metadata_validated') {
         if (!movementPatterns.contains(item.movementPattern)) {
           issue('invalid_movement_pattern', '${item.movementPattern}');
         }
@@ -85,12 +116,53 @@ class ExerciseCatalogValidationService {
             issue('invalid_muscle', muscle);
           }
         }
+        if (item.primaryMuscles.isEmpty) {
+          issue(
+            'missing_primary_muscle',
+            'Validated metadata needs a prime mover.',
+          );
+        }
+        final muscleRoles = <String>[
+          ...item.primaryMuscles,
+          ...item.secondaryMuscles,
+          ...item.stabilizerMuscles,
+        ];
+        if (muscleRoles.toSet().length != muscleRoles.length) {
+          issue('overlapping_muscle_roles', 'Muscle roles must not overlap.');
+        }
+        if (item.requiredAnatomyViews.isEmpty ||
+            item.requiredAnatomyViews.any(
+              (view) => !const <String>{'front', 'back'}.contains(view),
+            )) {
+          issue('invalid_anatomy_views', '${item.requiredAnatomyViews}');
+        }
+        if (!_validRange(item.defaultSetsMin, item.defaultSetsMax) ||
+            !_validOptionalRange(item.defaultRepsMin, item.defaultRepsMax) ||
+            !_validRange(
+              item.defaultRestSecondsMin,
+              item.defaultRestSecondsMax,
+            )) {
+          issue('invalid_programming_range', 'Programming ranges are invalid.');
+        }
+        if (item.metadataVersion == null ||
+            item.metadataSources.isEmpty ||
+            item.authoredAt == null ||
+            item.reviewedAt == null) {
+          issue(
+            'missing_review_provenance',
+            'Author/reviewer provenance is required.',
+          );
+        }
       }
       for (final reference in <String>[
         ...item.regressionIds,
         ...item.progressionIds,
         ...item.alternativeIds,
       ]) {
+        if (reference == item.canonicalId) {
+          issue('self_reference', reference);
+          continue;
+        }
         if (!allIds.contains(reference)) issue('broken_reference', reference);
       }
       if (item.maleAnatomyStatus.isEmpty || item.femaleAnatomyStatus.isEmpty) {
@@ -117,6 +189,12 @@ class ExerciseCatalogValidationService {
     }
     return CatalogValidationReport(exercises.length, issues);
   }
+
+  static bool _validRange(int? minimum, int? maximum) =>
+      minimum != null && maximum != null && minimum > 0 && minimum <= maximum;
+
+  static bool _validOptionalRange(int? minimum, int? maximum) =>
+      minimum == null && maximum == null || _validRange(minimum, maximum);
 
   List<List<CanonicalExercise>> duplicateCandidates(
     List<CanonicalExercise> exercises,

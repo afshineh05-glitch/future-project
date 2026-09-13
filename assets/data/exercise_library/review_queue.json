@@ -3,7 +3,516 @@
 
                              ],
     "unresolved":  [
-
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Abdominals Stretch Variation Four",
+                           "canonical_id":  "mu_ex_abdominals_stretch_variation_four"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Abdominals Stretch Variation One",
+                           "canonical_id":  "mu_ex_abdominals_stretch_variation_one"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Abdominals Stretch Variation Three",
+                           "canonical_id":  "mu_ex_abdominals_stretch_variation_three"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Abdominals Stretch Variation Two",
+                           "canonical_id":  "mu_ex_abdominals_stretch_variation_two"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Arnold Press",
+                           "canonical_id":  "mu_ex_arnold_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Clean And Press",
+                           "canonical_id":  "mu_ex_barbell_clean_and_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Floor Press",
+                           "canonical_id":  "mu_ex_barbell_floor_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Muscle Snatch",
+                           "canonical_id":  "mu_ex_barbell_muscle_snatch"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Power Snatch",
+                           "canonical_id":  "mu_ex_barbell_power_snatch"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Rack Pull",
+                           "canonical_id":  "mu_ex_barbell_rack_pull"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Snatch",
+                           "canonical_id":  "mu_ex_barbell_snatch"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Barbell Thruster",
+                           "canonical_id":  "mu_ex_barbell_thruster"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Battle Ropes",
+                           "canonical_id":  "mu_ex_battle_ropes"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Behind-the-Neck Press",
+                           "canonical_id":  "mu_ex_behind_the_neck_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Box Jump",
+                           "canonical_id":  "mu_ex_box_jump"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Burpee",
+                           "canonical_id":  "mu_ex_burpee"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable Front Raise",
+                           "canonical_id":  "mu_ex_cable_front_raise"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable High-to-Low Fly",
+                           "canonical_id":  "mu_ex_cable_high_to_low_fly"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable Low-to-High Fly",
+                           "canonical_id":  "mu_ex_cable_low_to_high_fly"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable Pec Fly",
+                           "canonical_id":  "mu_ex_cable_pec_fly"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable Rope Overhead Tricep Extension",
+                           "canonical_id":  "mu_ex_cable_rope_overhead_tricep_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cable Side Bend",
+                           "canonical_id":  "mu_ex_cable_side_bend"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Cuban Press",
+                           "canonical_id":  "mu_ex_cuban_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cycling Cooldown",
+                           "canonical_id":  "mu_ex_cycling_cooldown"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cycling Intervals",
+                           "canonical_id":  "mu_ex_cycling_intervals"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cycling Sprint",
+                           "canonical_id":  "mu_ex_cycling_sprint"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Cycling Warmup",
+                           "canonical_id":  "mu_ex_cycling_warmup"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dead Hang",
+                           "canonical_id":  "mu_ex_dead_hang"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Decline Skullcrusher",
+                           "canonical_id":  "mu_ex_dumbbell_decline_skullcrusher"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Front Raise",
+                           "canonical_id":  "mu_ex_dumbbell_front_raise"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Incline Front Raise",
+                           "canonical_id":  "mu_ex_dumbbell_incline_front_raise"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Seated Overhead Tricep Extension",
+                           "canonical_id":  "mu_ex_dumbbell_seated_overhead_tricep_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Side Bend",
+                           "canonical_id":  "mu_ex_dumbbell_side_bend"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Single Arm Clean And Press",
+                           "canonical_id":  "mu_ex_dumbbell_single_arm_clean_and_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Skullcrusher",
+                           "canonical_id":  "mu_ex_dumbbell_skullcrusher"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Superman",
+                           "canonical_id":  "mu_ex_dumbbell_superman"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Thruster",
+                           "canonical_id":  "mu_ex_dumbbell_thruster"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Dumbbell Wrist Extension",
+                           "canonical_id":  "mu_ex_dumbbell_wrist_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Floor Press",
+                           "canonical_id":  "mu_ex_floor_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Frog Pump",
+                           "canonical_id":  "mu_ex_frog_pump"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Hang Clean",
+                           "canonical_id":  "mu_ex_hang_clean"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Hang Power Clean",
+                           "canonical_id":  "mu_ex_hang_power_clean"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Hang Snatch",
+                           "canonical_id":  "mu_ex_hang_snatch"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Hiking",
+                           "canonical_id":  "mu_ex_hiking"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Hill Climb Repeats",
+                           "canonical_id":  "mu_ex_hill_climb_repeats"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Calf Press",
+                           "canonical_id":  "mu_ex_horizontal_leg_press_calf_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "JM Press",
+                           "canonical_id":  "mu_ex_jm_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Kettlebell Front Raise",
+                           "canonical_id":  "mu_ex_kettlebell_front_raise"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Kettlebell Thruster",
+                           "canonical_id":  "mu_ex_kettlebell_thruster"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Kettlebell Turkish Get-Up",
+                           "canonical_id":  "mu_ex_kettlebell_turkish_get_up"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Kettlebell Windmill",
+                           "canonical_id":  "mu_ex_kettlebell_windmill"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Landmine Press",
+                           "canonical_id":  "mu_ex_landmine_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Machine Cable V Bar Push Downs",
+                           "canonical_id":  "mu_ex_machine_cable_v_bar_push_downs"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Machine Pec Fly",
+                           "canonical_id":  "mu_ex_machine_pec_fly"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Machine Tricep Extension",
+                           "canonical_id":  "mu_ex_machine_tricep_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Man Maker",
+                           "canonical_id":  "mu_ex_man_maker"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Neck Curl",
+                           "canonical_id":  "mu_ex_neck_curl"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Neck Extension",
+                           "canonical_id":  "mu_ex_neck_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Pendulum Squat / V-Squat",
+                           "canonical_id":  "mu_ex_pendulum_squat_v_squat"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Plate Front Raise",
+                           "canonical_id":  "mu_ex_plate_front_raise"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Plate Pinch",
+                           "canonical_id":  "mu_ex_plate_pinch"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Push Jerk",
+                           "canonical_id":  "mu_ex_push_jerk"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Reverse Pec Deck",
+                           "canonical_id":  "mu_ex_reverse_pec_deck"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Shadow Boxing",
+                           "canonical_id":  "mu_ex_shadow_boxing"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Single-Arm Cable Fly",
+                           "canonical_id":  "mu_ex_single_arm_cable_fly"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Single-Arm Landmine Press",
+                           "canonical_id":  "mu_ex_single_arm_landmine_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Single-Arm Overhead Cable Extension",
+                           "canonical_id":  "mu_ex_single_arm_overhead_cable_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Single-Arm Tricep Extension",
+                           "canonical_id":  "mu_ex_single_arm_tricep_extension"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Single-Leg Step-Down",
+                           "canonical_id":  "mu_ex_single_leg_step_down"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Sled Pull",
+                           "canonical_id":  "mu_ex_sled_pull"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Sled Push/Pull",
+                           "canonical_id":  "mu_ex_sled_push"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Snatch-Grip High Pull",
+                           "canonical_id":  "mu_ex_snatch_grip_high_pull"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Snatch Pull",
+                           "canonical_id":  "mu_ex_snatch_pull"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Split Jerk",
+                           "canonical_id":  "mu_ex_split_jerk"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Steady State Ride",
+                           "canonical_id":  "mu_ex_steady_state_ride"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Supermans",
+                           "canonical_id":  "mu_ex_supermans"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Swim Kick Drill",
+                           "canonical_id":  "mu_ex_swim_kick_drill"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Swim Pull Drill",
+                           "canonical_id":  "mu_ex_swim_pull_drill"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Tate Press",
+                           "canonical_id":  "mu_ex_tate_press"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Toes-to-Bar",
+                           "canonical_id":  "mu_ex_toes_to_bar"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "V-Up",
+                           "canonical_id":  "mu_ex_v_up"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "identity_does_not_define_single_execution",
+                           "source_name":  "Wall Ball",
+                           "canonical_id":  "mu_ex_wall_ball"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Wall Sit",
+                           "canonical_id":  "mu_ex_wall_sit"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Wrist Roller",
+                           "canonical_id":  "mu_ex_wrist_roller"
+                       },
+                       {
+                           "stage":  "author",
+                           "reason":  "no_unique_reviewed_movement_rule",
+                           "source_name":  "Z Press",
+                           "canonical_id":  "mu_ex_z_press"
+                       }
                    ],
     "unknown_muscles":  [
 

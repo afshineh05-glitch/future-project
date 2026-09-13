@@ -22,6 +22,11 @@ class MuscleTaxonomy {
     'abductors',
     'hip_flexors',
     'calves',
+    'rotator_cuff',
+    'serratus_anterior',
+    'neck_flexors',
+    'neck_extensors',
+    'tibialis_anterior',
   };
 
   static const Map<String, String> _aliases = <String, String>{

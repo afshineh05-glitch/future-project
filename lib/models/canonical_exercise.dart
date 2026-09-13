@@ -23,6 +23,7 @@ class CanonicalExercise {
   final List<String> primaryMuscles;
   final List<String> secondaryMuscles;
   final List<String> stabilizerMuscles;
+  final List<String> requiredAnatomyViews;
   final List<String> trainingGoals;
   final List<String> suitableLocations;
   final List<String> setupRequirements;
@@ -47,6 +48,10 @@ class CanonicalExercise {
   final String? videoAsset;
   final String videoStatus;
   final String? futureVendorAssetKey;
+  final int? metadataVersion;
+  final List<String> metadataSources;
+  final String? authoredAt;
+  final String? reviewedAt;
 
   const CanonicalExercise({
     required this.canonicalId,
@@ -73,6 +78,7 @@ class CanonicalExercise {
     required this.primaryMuscles,
     required this.secondaryMuscles,
     required this.stabilizerMuscles,
+    required this.requiredAnatomyViews,
     required this.trainingGoals,
     required this.suitableLocations,
     required this.setupRequirements,
@@ -97,9 +103,16 @@ class CanonicalExercise {
     required this.videoAsset,
     required this.videoStatus,
     required this.futureVendorAssetKey,
+    required this.metadataVersion,
+    required this.metadataSources,
+    required this.authoredAt,
+    required this.reviewedAt,
   });
 
-  bool get isCoachSelectable => active && validationStatus == 'verified';
+  bool get isCoachSelectable =>
+      active &&
+      validationStatus == 'verified' &&
+      metadataStatus == 'metadata_validated';
 
   String get futureMaleAnatomyPath =>
       'assets/exercises/anatomy/male/$canonicalId.png';
@@ -142,6 +155,7 @@ class CanonicalExercise {
       primaryMuscles: strings('primary_muscles'),
       secondaryMuscles: strings('secondary_muscles'),
       stabilizerMuscles: strings('stabilizer_muscles'),
+      requiredAnatomyViews: strings('required_anatomy_views'),
       trainingGoals: strings('training_goals'),
       suitableLocations: strings('suitable_locations'),
       setupRequirements: strings('setup_requirements'),
@@ -171,6 +185,10 @@ class CanonicalExercise {
       videoAsset: optional('video_asset'),
       videoStatus: json['video_status']?.toString() ?? '',
       futureVendorAssetKey: optional('future_vendor_asset_key'),
+      metadataVersion: integer('metadata_version'),
+      metadataSources: strings('metadata_sources'),
+      authoredAt: optional('authored_at'),
+      reviewedAt: optional('reviewed_at'),
     );
   }
 }

@@ -7,7 +7,16 @@ class CoachExerciseCatalog {
   const CoachExerciseCatalog(this.repository);
 
   Future<List<CanonicalExercise>> selectableExercises() =>
-      repository.activeForCoach();
+      repository.load().then(
+        (items) => items
+            .where(
+              (item) =>
+                  item.active &&
+                  item.validationStatus == 'verified' &&
+                  item.metadataStatus == 'metadata_validated',
+            )
+            .toList(growable: false),
+      );
 
   Future<CanonicalExercise?> resolveSelection({
     String? canonicalId,

@@ -122,6 +122,18 @@ void main() {
     );
   });
 
+  test('relationship self references are rejected', () {
+    final raw = Map<String, dynamic>.from(rawExercises.first);
+    raw['progression_ids'] = <String>[raw['canonical_id'].toString()];
+    final report = ExerciseCatalogValidationService().validate(
+      <CanonicalExercise>[CanonicalExercise.fromJson(raw)],
+    );
+    expect(
+      report.issues.any((issue) => issue.code == 'self_reference'),
+      isTrue,
+    );
+  });
+
   test('nullable asset fields and existing anatomy fallback are supported', () {
     final pending = exercises.firstWhere(
       (item) => item.maleAnatomyAsset == null,
@@ -211,10 +223,13 @@ void main() {
     final repository = ExerciseCatalogRepository((_) async => catalogText);
     final coach = CoachExerciseCatalog(repository);
     final selected = await coach.selectableExercises();
-    expect(selected, isNotEmpty);
+    expect(selected, hasLength(327));
     expect(
       selected.every(
-        (item) => item.active && item.validationStatus == 'verified',
+        (item) =>
+            item.active &&
+            item.validationStatus == 'verified' &&
+            item.metadataStatus == 'metadata_validated',
       ),
       isTrue,
     );
@@ -281,5 +296,114 @@ void main() {
       ExerciseCatalogValidationService().validate(exercises).isValid,
       isTrue,
     );
+  });
+
+  test('production ordering and workflow counts are deterministic', () {
+    final ids = exercises.map((item) => item.canonicalId).toList();
+    final ordered = <String>[...ids]..sort();
+    expect(ordered.first, 'mu_ex_abdominals_stretch_variation_four');
+    expect(ordered.last, 'mu_ex_zottman_curl');
+    expect(
+      exercises.where((item) => item.metadataStatus == 'metadata_validated'),
+      hasLength(327),
+    );
+    expect(
+      exercises.where((item) => item.metadataStatus == 'needs_review'),
+      hasLength(85),
+    );
+    expect(
+      exercises.where((item) => item.metadataStatus == 'metadata_pending'),
+      isEmpty,
+    );
+  });
+
+  test(
+    'validated metadata passes anatomy, programming, and provenance gates',
+    () {
+      for (final item in exercises.where(
+        (item) => item.metadataStatus == 'metadata_validated',
+      )) {
+        expect(item.primaryMuscles, isNotEmpty, reason: item.canonicalId);
+        final roles = <String>{
+          ...item.primaryMuscles,
+          ...item.secondaryMuscles,
+          ...item.stabilizerMuscles,
+        };
+        expect(
+          roles.length,
+          item.primaryMuscles.length +
+              item.secondaryMuscles.length +
+              item.stabilizerMuscles.length,
+          reason: item.canonicalId,
+        );
+        expect(item.requiredAnatomyViews, isNotEmpty, reason: item.canonicalId);
+        expect(
+          item.requiredAnatomyViews.every(
+            (view) => const <String>{'front', 'back'}.contains(view),
+          ),
+          isTrue,
+        );
+        expect(item.defaultSetsMin, lessThanOrEqualTo(item.defaultSetsMax!));
+        if (item.defaultRepsMin == null) {
+          expect(item.defaultRepsMax, isNull);
+        } else {
+          expect(item.defaultRepsMin, lessThanOrEqualTo(item.defaultRepsMax!));
+        }
+        expect(item.metadataVersion, 1);
+        expect(item.metadataSources, isNotEmpty);
+        expect(item.authoredAt, isNotNull);
+        expect(item.reviewedAt, isNotNull);
+      }
+    },
+  );
+
+  test(
+    'checkpoint recovery records independent stages and completed batches',
+    () {
+      final checkpoint =
+          jsonDecode(
+                File(
+                  'assets/data/exercise_library/metadata_production_checkpoint.json',
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      final queue =
+          jsonDecode(
+                File(
+                  'assets/data/exercise_library/review_queue.json',
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      expect(checkpoint['completed_records'], 327);
+      expect(checkpoint['pending_records'], 0);
+      expect(checkpoint['review_records'], 85);
+      expect(checkpoint['failed_records'], 0);
+      expect(checkpoint['current_batch'], 21);
+      expect(checkpoint['last_completed_canonical_id'], 'mu_ex_zottman_curl');
+      expect(
+        checkpoint['generator_version'],
+        isNot(checkpoint['reviewer_version']),
+      );
+      expect(queue['unresolved'], hasLength(85));
+    },
+  );
+
+  test('identities and protected assets remain intact', () {
+    expect(exercises.map((item) => item.canonicalId).toSet(), hasLength(412));
+    expect(exercises.map((item) => item.sourceName).toSet(), hasLength(412));
+    expect(
+      exercises.where((item) => item.maleAnatomyAsset != null),
+      hasLength(4),
+    );
+    expect(exercises.where((item) => item.femaleAnatomyAsset != null), isEmpty);
+    expect(exercises.where((item) => item.videoAsset != null), isEmpty);
+    for (final raw in rawExercises) {
+      expect(
+        raw.keys.where(
+          (key) => key.contains('description') || key.contains('preview'),
+        ),
+        isEmpty,
+      );
+    }
   });
 }
