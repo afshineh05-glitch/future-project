@@ -1,6 +1,7 @@
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
+import 'package:future_project/models/behavior_pattern.dart';
 
 enum UnifiedCoachPrimaryState {
   userCondition,
@@ -8,6 +9,7 @@ enum UnifiedCoachPrimaryState {
   dailyDecision,
   weeklyMission,
   wearableContext,
+  learnedBehavior,
   general,
 }
 
@@ -26,6 +28,7 @@ class UnifiedCoachDataCoverage {
   final bool dailyDecisionAvailable;
   final bool weeklyMissionAvailable;
   final bool wearableContextAvailable;
+  final bool learnedPatternsAvailable;
 
   const UnifiedCoachDataCoverage({
     required this.userConditionAvailable,
@@ -33,6 +36,7 @@ class UnifiedCoachDataCoverage {
     required this.dailyDecisionAvailable,
     required this.weeklyMissionAvailable,
     required this.wearableContextAvailable,
+    this.learnedPatternsAvailable = false,
   });
 }
 
@@ -49,6 +53,7 @@ class UnifiedCoachContext {
   final List<String> evidence;
   final UnifiedCoachDataCoverage dataCoverage;
   final DateTime generatedAt;
+  final List<BehaviorPattern> learnedPatterns;
 
   const UnifiedCoachContext({
     required this.localDate,
@@ -63,5 +68,6 @@ class UnifiedCoachContext {
     required this.evidence,
     required this.dataCoverage,
     required this.generatedAt,
+    this.learnedPatterns = const [],
   });
 }

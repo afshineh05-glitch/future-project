@@ -2,6 +2,7 @@ import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
+import 'package:future_project/models/behavior_pattern.dart';
 
 class UnifiedCoachContextInput {
   final DateTime now;
@@ -13,6 +14,7 @@ class UnifiedCoachContextInput {
   final String? wearableInsight;
   final String? wearableAction;
   final List<String> wearableEvidence;
+  final List<BehaviorPattern> learnedPatterns;
 
   const UnifiedCoachContextInput({
     required this.now,
@@ -24,6 +26,7 @@ class UnifiedCoachContextInput {
     this.wearableInsight,
     this.wearableAction,
     this.wearableEvidence = const [],
+    this.learnedPatterns = const [],
   });
 }
 
@@ -80,6 +83,17 @@ class UnifiedCoachContextEngine {
       insight = input.wearableInsight!;
       action = input.wearableAction!;
       evidence = List.unmodifiable(input.wearableEvidence);
+    } else if (input.learnedPatterns.isNotEmpty) {
+      final pattern = [...input.learnedPatterns]
+        ..sort(
+          (a, b) => b.confidenceBand.index.compareTo(a.confidenceBand.index),
+        );
+      state = UnifiedCoachPrimaryState.learnedBehavior;
+      priority = UnifiedCoachPriority.maintainHealthyPattern;
+      insight = pattern.first.coachHint;
+      action =
+          'Keep following your existing plan; use this pattern as context only.';
+      evidence = ['behavior_pattern:${pattern.first.fingerprint}'];
     } else if (input.recoveryContext?.overallState ==
             RecoveryContextState.favorable ||
         input.recoveryContext?.overallState == RecoveryContextState.normal) {
@@ -116,8 +130,10 @@ class UnifiedCoachContextEngine {
         dailyDecisionAvailable: input.dailyDecision != null,
         weeklyMissionAvailable: input.weeklyPlan != null,
         wearableContextAvailable: input.wearableInsight != null,
+        learnedPatternsAvailable: input.learnedPatterns.isNotEmpty,
       ),
       generatedAt: input.now,
+      learnedPatterns: List.unmodifiable(input.learnedPatterns),
     );
   }
 

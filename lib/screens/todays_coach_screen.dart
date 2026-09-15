@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
+import 'package:future_project/models/behavior_pattern.dart';
 import 'package:future_project/models/end_of_day_coach_summary.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
+import 'package:future_project/services/behavior_pattern_service.dart';
 import 'package:future_project/services/coach_daily_decision_service.dart';
 import 'package:future_project/services/end_of_day_coach_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
@@ -60,12 +64,16 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   final _endOfDayService = EndOfDayCoachService();
   final _endOfDayEngine = const EndOfDayCoachEngine();
   final _unifiedCoachEngine = const UnifiedCoachContextEngine();
+  final _behaviorPatternService = BehaviorPatternService();
   CoachRecoveryRecommendation? _recoveryRecommendation;
   RecoveryContext? _recoveryContext;
   EndOfDayObservation _endOfDayObservation = const EndOfDayObservation();
   WeeklyCoachPlan? _weeklyPlan;
   bool _isPlannedTrainingDay = false;
   CoachDecision? _trainingChoice;
+  List<BehaviorPattern> _behaviorPatterns = const [];
+  Future<void>? _behaviorPatternsLoad;
+  String? _behaviorPatternsUserId;
   bool _isDecisionSaving = false;
   bool _decisionSaveFailed = false;
 
@@ -104,6 +112,9 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
 
       setState(() {
         _isLoading = false;
+        _behaviorPatterns = const [];
+        _behaviorPatternsLoad = null;
+        _behaviorPatternsUserId = null;
         _errorMessage = 'Please sign in to use Today’s Coach.';
       });
       return;
@@ -120,6 +131,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
 
       final bool shouldLoadPriority =
           row != null && row['is_completed'] == true;
+      final behaviorUserChanged = _behaviorPatternsUserId != user.id;
 
       setState(() {
         _foundation = row;
@@ -134,12 +146,14 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _weeklyPlan = null;
         _isPlannedTrainingDay = false;
         _trainingChoice = null;
+        if (behaviorUserChanged) _behaviorPatterns = const [];
         _decisionSaveFailed = false;
         _isLoading = false;
         _errorMessage = null;
       });
 
       if (shouldLoadPriority) {
+        unawaited(_loadBehaviorPatterns(user.id));
         await Future.wait<void>([
           _loadSmartPriority(),
           _loadSmartMorningBrief(),
@@ -188,6 +202,27 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
       }
     } catch (_) {
       // Decision context is optional; Coach guidance must continue to load.
+    }
+  }
+
+  Future<void> _loadBehaviorPatterns(String userId) {
+    if (_behaviorPatternsUserId == userId && _behaviorPatternsLoad != null) {
+      return _behaviorPatternsLoad!;
+    }
+    _behaviorPatternsUserId = userId;
+    final load = _performBehaviorPatternLoad(userId);
+    _behaviorPatternsLoad = load;
+    return load;
+  }
+
+  Future<void> _performBehaviorPatternLoad(String userId) async {
+    try {
+      final patterns = await _behaviorPatternService.learnAndSave();
+      if (mounted && _behaviorPatternsUserId == userId) {
+        setState(() => _behaviorPatterns = patterns);
+      }
+    } catch (_) {
+      // Learning context is optional and must never block Today's Coach.
     }
   }
 
@@ -1601,6 +1636,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
             _hasSelfReportedPain(foundation) ||
             _hasSelfReportedFatigue(foundation),
         isPlannedTrainingDay: _isPlannedTrainingDay,
+        learnedPatterns: _behaviorPatterns,
       ),
     );
   }
