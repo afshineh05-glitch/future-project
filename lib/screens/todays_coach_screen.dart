@@ -5,16 +5,20 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/models/coach_recovery_recommendation.dart';
 import 'package:future_project/models/coach_daily_decision.dart';
 import 'package:future_project/models/behavior_pattern.dart';
+import 'package:future_project/models/daily_activity_state.dart';
 import 'package:future_project/models/end_of_day_coach_summary.dart';
+import 'package:future_project/models/today_mission.dart';
 import 'package:future_project/models/recovery_context.dart';
 import 'package:future_project/models/unified_coach_context.dart';
 import 'package:future_project/models/weekly_coach_plan.dart';
 import 'package:future_project/services/adaptive_training_context_service.dart';
 import 'package:future_project/services/behavior_pattern_service.dart';
 import 'package:future_project/services/coach_daily_decision_service.dart';
+import 'package:future_project/services/daily_activity_state_service.dart';
 import 'package:future_project/services/end_of_day_coach_service.dart';
 import 'package:future_project/services/health/recovery_context_service.dart';
 import 'package:future_project/services/today_coach_recovery_advisor.dart';
+import 'package:future_project/services/today_mission_engine.dart';
 import 'package:future_project/services/today_weekly_mission_advisor.dart';
 import 'package:future_project/services/unified_coach_context_engine.dart';
 import 'package:future_project/services/weekly_coach_service.dart';
@@ -65,6 +69,8 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   final _endOfDayEngine = const EndOfDayCoachEngine();
   final _unifiedCoachEngine = const UnifiedCoachContextEngine();
   final _behaviorPatternService = BehaviorPatternService();
+  final _dailyActivityService = DailyActivityStateService();
+  final _todayMissionEngine = const TodayMissionEngine();
   CoachRecoveryRecommendation? _recoveryRecommendation;
   RecoveryContext? _recoveryContext;
   EndOfDayObservation _endOfDayObservation = const EndOfDayObservation();
@@ -74,6 +80,9 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
   List<BehaviorPattern> _behaviorPatterns = const [];
   Future<void>? _behaviorPatternsLoad;
   String? _behaviorPatternsUserId;
+  DailyActivityState? _dailyActivityState;
+  Future<void>? _dailyActivityLoad;
+  String? _dailyActivityUserId;
   bool _isDecisionSaving = false;
   bool _decisionSaveFailed = false;
 
@@ -115,6 +124,9 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
         _behaviorPatterns = const [];
         _behaviorPatternsLoad = null;
         _behaviorPatternsUserId = null;
+        _dailyActivityState = null;
+        _dailyActivityLoad = null;
+        _dailyActivityUserId = null;
         _errorMessage = 'Please sign in to use Today’s Coach.';
       });
       return;
@@ -154,6 +166,7 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
 
       if (shouldLoadPriority) {
         unawaited(_loadBehaviorPatterns(user.id));
+        unawaited(_loadDailyActivityState(user.id));
         await Future.wait<void>([
           _loadSmartPriority(),
           _loadSmartMorningBrief(),
@@ -223,6 +236,32 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
       }
     } catch (_) {
       // Learning context is optional and must never block Today's Coach.
+    }
+  }
+
+  Future<void> _loadDailyActivityState(String userId) {
+    if (_dailyActivityUserId == userId && _dailyActivityLoad != null) {
+      return _dailyActivityLoad!;
+    }
+    if (_dailyActivityUserId != userId) {
+      _dailyActivityState = null;
+    }
+    _dailyActivityUserId = userId;
+    final load = _performDailyActivityLoad(userId);
+    _dailyActivityLoad = load;
+    return load;
+  }
+
+  Future<void> _performDailyActivityLoad(String userId) async {
+    try {
+      final state = await _dailyActivityService.loadToday();
+      if (mounted && _dailyActivityUserId == userId) {
+        setState(() => _dailyActivityState = state);
+      }
+    } catch (_) {
+      // Optional synchronization must never block Today's Coach.
+    } finally {
+      if (_dailyActivityUserId == userId) _dailyActivityLoad = null;
     }
   }
 
@@ -1051,6 +1090,10 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
           _buildHeader(),
           const SizedBox(height: 22),
           _buildMorningBrief(),
+          if (_dailyActivityState != null) ...[
+            const SizedBox(height: 18),
+            _buildTodayMission(),
+          ],
           if (_recoveryRecommendation?.shouldSurface == true) ...[
             const SizedBox(height: 18),
             _buildRecoveryGuidance(),
@@ -1267,6 +1310,53 @@ class _TodaysCoachScreenState extends State<TodaysCoachScreen> {
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTodayMission() {
+    final TodayMission mission = _todayMissionEngine.evaluate(
+      TodayMissionInput(
+        coachContext: _unifiedCoachContext(),
+        activityState: _dailyActivityState!,
+        weeklyPlan: _weeklyPlan,
+      ),
+    );
+    return _CoachCard(
+      icon: mission.alreadyCompleted
+          ? Icons.check_circle_outline
+          : Icons.track_changes_outlined,
+      title: 'Today’s Mission',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            mission.title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            mission.action,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.45,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            mission.reason,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: AppTheme.textSecondary,
+            ),
+          ),
         ],
       ),
     );
