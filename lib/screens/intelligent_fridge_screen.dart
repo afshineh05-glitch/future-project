@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,11 +7,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:future_project/debug/ingredient_image_refresh_key.dart';
 import 'package:future_project/models/cook_for_goal_recipe.dart';
 import 'package:future_project/models/food_visual.dart';
+import 'package:future_project/models/grocery_deals.dart';
 import 'package:future_project/models/intelligent_fridge.dart';
 import 'package:future_project/models/nutrition_profile.dart';
 import 'package:future_project/models/performance_fuel.dart';
 import 'package:future_project/screens/ingredient_image_curator_screen.dart';
 import 'package:future_project/services/intelligent_fridge_service.dart';
+import 'package:future_project/services/deals_location_service.dart';
+import 'package:future_project/services/grocery_deals_engine.dart';
+import 'package:future_project/services/google_grocery_search_provider.dart';
 import 'package:future_project/services/ingredient_image_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 
@@ -36,8 +42,15 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
   late final FridgeInventoryRepository _repository;
   late final IntelligentFridgeService _service;
   late final IngredientImageService _imageService;
+  late final GroceryDealsEngine _dealsEngine;
+  late final SupabaseDealsLocationService _locationService;
+  final DealsSearchCoordinator _dealsCoordinator = DealsSearchCoordinator();
+  StreamSubscription<AuthState>? _authSubscription;
   final Map<String, Future<FoodVisual>> _ingredientImages = {};
   IntelligentFridgeState? _state;
+  GroceryDealsOutcome? _dealsOutcome;
+  UserShoppingArea? _shoppingArea;
+  int _loadGeneration = 0;
   String _search = '';
   String _selectedCategory = 'All';
   Set<String> _selectedKeys = {};
@@ -77,8 +90,32 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
     _repository = SupabaseFridgeInventoryRepository();
     _service = IntelligentFridgeService(repository: _repository);
     _imageService = IngredientImageService();
+    _locationService = SupabaseDealsLocationService();
+    _dealsEngine = GroceryDealsEngine(
+      locationService: _locationService,
+      provider: GoogleGrocerySearchProvider(),
+    );
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      event,
+    ) {
+      if (event.session?.user.id == widget.profile.userId) return;
+      _loadGeneration++;
+      _dealsCoordinator.clear();
+      if (mounted) {
+        setState(() {
+          _shoppingArea = null;
+          _dealsOutcome = null;
+        });
+      }
+    });
     _loadIngredientImages();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   void _loadIngredientImages() {
@@ -134,9 +171,134 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
               .map((item) => item.ingredientKey)
               .toSet();
         });
+        await _loadDeals(value.groceryList);
       }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _loadDeals(List<WeeklyFoodRequirement> groceryList) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null || userId != widget.profile.userId) return;
+    final generation = ++_loadGeneration;
+    try {
+      final area = await _locationService.currentShoppingArea();
+      final outcome = await _dealsCoordinator.search(
+        userId: userId,
+        engine: _dealsEngine,
+        groceryList: groceryList,
+      );
+      if (mounted &&
+          generation == _loadGeneration &&
+          Supabase.instance.client.auth.currentUser?.id == userId) {
+        setState(() {
+          _shoppingArea = area;
+          _dealsOutcome = outcome;
+        });
+      }
+    } catch (_) {
+      if (mounted &&
+          generation == _loadGeneration &&
+          Supabase.instance.client.auth.currentUser?.id == userId) {
+        setState(
+          () => _dealsOutcome = const GroceryDealsOutcome(
+            status: DealsResultStatus.noReliablePrice,
+            providerFailed: true,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _editShoppingArea() async {
+    final controller = TextEditingController(
+      text: _shoppingArea?.postalCode ?? '',
+    );
+    var radius = _shoppingArea?.radiusKm ?? 15;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Shopping area'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Used only for nearby grocery prices. No GPS or background tracking.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Canadian postal code',
+                  hintText: 'H2X 1Y4',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<double>(
+                initialValue: radius,
+                decoration: const InputDecoration(
+                  labelText: 'Search radius',
+                  border: OutlineInputBorder(),
+                ),
+                items: CanadianPostalCode.allowedRadiiKm
+                    .map(
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text('${value.round()} km'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => radius = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!CanadianPostalCode.isValid(controller.text)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a valid Canadian postal code.'),
+                    ),
+                  );
+                  return;
+                }
+                try {
+                  await _locationService.saveShoppingArea(
+                    postalCode: controller.text,
+                    radiusKm: radius,
+                  );
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, true);
+                  }
+                } catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.toString())));
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (saved == true && mounted && _state != null) {
+      setState(() => _dealsOutcome = null);
+      await _loadDeals(_state!.groceryList);
     }
   }
 
@@ -492,9 +654,20 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
                   else
                     ..._state!.groceryList.map(_groceryTile),
                   const SizedBox(height: 16),
-                  const _EmptyCard(
-                    'Partner-store purchasing is unavailable until a supported partner is configured for your region.',
+                  Row(
+                    children: [
+                      Expanded(child: _section('Nearby Grocery Prices')),
+                      TextButton.icon(
+                        onPressed: _editShoppingArea,
+                        icon: const Icon(Icons.location_on_outlined),
+                        label: Text(
+                          _shoppingArea == null ? 'Set area' : 'Change',
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 10),
+                  _dealsSection(),
                 ],
               ),
             ),
@@ -703,6 +876,90 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
       trailing: Text('Need about ${_amount(item.purchaseGrams)}'),
     ),
   );
+
+  Widget _dealsSection() {
+    final outcome = _dealsOutcome;
+    if (outcome == null) {
+      return const _Surface(child: Center(child: CircularProgressIndicator()));
+    }
+    final message = switch (outcome.status) {
+      DealsResultStatus.shoppingAreaRequired =>
+        'Set your Canadian postal code and radius to find verified nearby prices.',
+      DealsResultStatus.noReliablePrice =>
+        'No verified nearby deal is available. Unconfirmed prices and locations are hidden.',
+      _ => null,
+    };
+    if (message != null) return _EmptyCard(message);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          outcome.status == DealsResultStatus.dealsFound
+              ? 'On sale nearby'
+              : 'Regular price',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        ...outcome.recommendations.map((recommendation) {
+          final result = recommendation.result;
+          final package = result.packageQuantity == null
+              ? null
+              : _dealQuantity(result.packageQuantity!, result.packageUnitType!);
+          final normalized = recommendation.normalizedPrice == null
+              ? null
+              : '\$${recommendation.normalizedPrice!.toStringAsFixed(2)} per '
+                    '${result.packageUnitType == FoodUnitType.volume
+                        ? 'L'
+                        : result.packageUnitType == FoodUnitType.count
+                        ? 'item'
+                        : 'kg'}';
+          final validity = result.validUntil == null
+              ? null
+              : 'Valid until ${_shortDate(result.validUntil!)}';
+          return _Surface(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                recommendation.isDeal
+                    ? Icons.local_offer_outlined
+                    : Icons.storefront_outlined,
+                color: AppTheme.primaryGreen,
+              ),
+              title: Text('${recommendation.foodName} · ${result.storeName}'),
+              subtitle: Text(
+                [
+                  recommendation.isDeal
+                      ? 'ON SALE'
+                      : 'BEST NEARBY REGULAR PRICE',
+                  ?package,
+                  ?normalized,
+                  '${recommendation.distanceKm.toStringAsFixed(1)} km away',
+                  ?validity,
+                  'Source: ${result.sourceName}',
+                ].join(' · '),
+              ),
+              trailing: Text(
+                '${result.currency} ${result.price.toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  String _shortDate(DateTime value) =>
+      '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
+  String _dealQuantity(double quantity, FoodUnitType type) => switch (type) {
+    FoodUnitType.mass => _amount(quantity),
+    FoodUnitType.volume =>
+      quantity >= 1000
+          ? '${(quantity / 1000).toStringAsFixed(1)} L'
+          : '${quantity.round()} mL',
+    FoodUnitType.count => '${quantity.round()} items',
+  };
 
   String _amount(double grams) => grams >= 1000
       ? '${(grams / 1000).toStringAsFixed(1)} kg'
