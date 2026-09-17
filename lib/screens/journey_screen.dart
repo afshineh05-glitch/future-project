@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/models/journey.dart';
 import 'package:future_project/services/journey_access_service.dart';
@@ -23,13 +24,42 @@ class _JourneyScreenState extends State<JourneyScreen> {
   bool _loading = true;
   bool _authorized = false;
   bool _redirectScheduled = false;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _access = widget.accessService ?? JourneyAccessService();
     _journey = widget.journeyService ?? JourneyService();
+    _listenForAccountChanges();
     unawaited(_load());
+  }
+
+  void _listenForAccountChanges() {
+    try {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange
+          .listen((_) {
+            if (!mounted) return;
+            _access.clear();
+            _journey.clear();
+            setState(() {
+              _timeline = null;
+              _error = null;
+              _authorized = false;
+              _loading = true;
+              _redirectScheduled = false;
+            });
+            unawaited(_load());
+          });
+    } catch (_) {
+      // Dependency-injected test readers may run without Supabase initialized.
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

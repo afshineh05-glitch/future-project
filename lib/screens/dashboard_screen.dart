@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,12 +25,27 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late final JourneyAccessService _journeyAccess;
   bool _journeyAllowed = false;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _journeyAccess = JourneyAccessService();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      _,
+    ) {
+      if (!mounted) return;
+      _journeyAccess.clear();
+      setState(() => _journeyAllowed = false);
+      _loadJourneyAccess();
+    });
     _loadJourneyAccess();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadJourneyAccess() async {
@@ -236,8 +253,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               backgroundColor: AppTheme.journeyCard,
               iconColor: AppTheme.aiBlue,
               onTap: () async {
-                final allowed = await _journeyAccess.canAccess();
-                if (!context.mounted || !allowed) return;
+                final allowed = await _journeyAccess.canAccess(
+                  forceRefresh: true,
+                );
+                if (!context.mounted) return;
+                if (!allowed) {
+                  setState(() => _journeyAllowed = false);
+                  return;
+                }
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const JourneyScreen()),

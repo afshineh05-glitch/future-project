@@ -45,4 +45,13 @@ void main() {
     reader.enabled = false;
     expect(await service.canAccess(), isFalse);
   });
+
+  test('forced refresh observes a revoked grant without logout', () async {
+    final reader = _Reader(true);
+    final service = JourneyAccessService(reader: reader);
+    expect(await service.canAccess(), isTrue);
+    reader.enabled = false;
+    expect(await service.canAccess(forceRefresh: true), isFalse);
+    expect(reader.reads, 2);
+  });
 }

@@ -45,14 +45,14 @@ class JourneyAccessService {
   bool? _cachedValue;
 
   JourneyAccessService({JourneyAccessReader? reader})
-      : _reader = reader ?? SupabaseJourneyAccessReader();
+    : _reader = reader ?? SupabaseJourneyAccessReader();
 
   String? get currentUserId => _reader.currentUserId;
 
-  Future<bool> canAccess() {
+  Future<bool> canAccess({bool forceRefresh = false}) {
     final userId = _reader.currentUserId;
     if (userId == null) return Future<bool>.value(false);
-    if (_cachedUserId == userId && _cachedValue != null) {
+    if (!forceRefresh && _cachedUserId == userId && _cachedValue != null) {
       return Future<bool>.value(_cachedValue!);
     }
     final existing = _inFlight;
