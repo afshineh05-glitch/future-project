@@ -7,44 +7,62 @@ import 'package:future_project/screens/intelligent_coach_screen.dart';
 import 'package:future_project/screens/journey_screen.dart';
 import 'package:future_project/screens/vision_screen.dart';
 import 'package:future_project/screens/welcome_screen.dart';
+import 'package:future_project/services/journey_access_service.dart';
 import 'package:future_project/screens/wearable_debug_screen.dart';
 import 'package:future_project/screens/wearables_hub_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 import 'package:future_project/widgets/dashboard_card.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  late final JourneyAccessService _journeyAccess;
+  bool _journeyAllowed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _journeyAccess = JourneyAccessService();
+    _loadJourneyAccess();
+  }
+
+  Future<void> _loadJourneyAccess() async {
+    final userId = _journeyAccess.currentUserId;
+    if (userId == null) return;
+    final allowed = await _journeyAccess.canAccess();
+    if (!mounted || _journeyAccess.currentUserId != userId) return;
+    setState(() => _journeyAllowed = allowed);
+  }
 
   Future<void> _signOut(BuildContext context) async {
     try {
       await Supabase.instance.client.auth.signOut();
 
+      _journeyAccess.clear();
+
       if (!context.mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (_) => const WelcomeScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,
       );
     } on AuthException catch (error) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not sign out. Please try again.',
-          ),
-        ),
+        const SnackBar(content: Text('Could not sign out. Please try again.')),
       );
     }
   }
@@ -73,9 +91,7 @@ class DashboardScreen extends StatelessWidget {
             onPressed: () {
               _signOut(context);
             },
-            icon: const Icon(
-              Icons.logout_outlined,
-            ),
+            icon: const Icon(Icons.logout_outlined),
           ),
         ],
       ),
@@ -93,10 +109,7 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Let’s build your future.',
-            style: TextStyle(
-              fontSize: 18,
-              color: AppTheme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 18, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 28),
 
@@ -116,14 +129,10 @@ class DashboardScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppTheme.border,
-              ),
+              border: Border.all(color: AppTheme.border),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: 0.06,
-                  ),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -138,8 +147,7 @@ class DashboardScreen extends StatelessWidget {
                     value: 0.4,
                     minHeight: 10,
                     backgroundColor: AppTheme.visionCard,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(
+                    valueColor: AlwaysStoppedAnimation<Color>(
                       AppTheme.primaryGreen,
                     ),
                   ),
@@ -180,8 +188,7 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      const IntelligentCoachScreen(),
+                  builder: (_) => const IntelligentCoachScreen(),
                 ),
               );
             },
@@ -214,34 +221,31 @@ class DashboardScreen extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const VisionScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const VisionScreen()),
               );
             },
           ),
 
           const SizedBox(height: 18),
 
-          DashboardCard(
-            icon: Icons.route_outlined,
-            title: 'Our Journey',
-            subtitle: 'Follow your daily plan',
-            backgroundColor: AppTheme.journeyCard,
-            iconColor: AppTheme.aiBlue,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const JourneyScreen(),
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 18),
+          if (_journeyAllowed) ...[
+            DashboardCard(
+              icon: Icons.route_outlined,
+              title: 'Your Journey',
+              subtitle: 'See the progress you have actually recorded',
+              backgroundColor: AppTheme.journeyCard,
+              iconColor: AppTheme.aiBlue,
+              onTap: () async {
+                final allowed = await _journeyAccess.canAccess();
+                if (!context.mounted || !allowed) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const JourneyScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 18),
+          ],
 
           DashboardCard(
             icon: Icons.restaurant_outlined,
@@ -252,10 +256,7 @@ class DashboardScreen extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const CalorieScannerScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const CalorieScannerScreen()),
               );
             },
           ),
@@ -279,9 +280,7 @@ class DashboardScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.visionCard,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppTheme.border,
-              ),
+              border: Border.all(color: AppTheme.border),
             ),
             child: const Text(
               'Trust your belief, let your actions bring it to life.',

@@ -1,286 +1,345 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import 'package:future_project/models/journey.dart';
+import 'package:future_project/services/journey_access_service.dart';
+import 'package:future_project/services/journey_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 
-class JourneyScreen extends StatelessWidget {
-  const JourneyScreen({super.key});
+class JourneyScreen extends StatefulWidget {
+  const JourneyScreen({super.key, this.accessService, this.journeyService});
+  final JourneyAccessService? accessService;
+  final JourneyService? journeyService;
+  @override
+  State<JourneyScreen> createState() => _JourneyScreenState();
+}
+
+class _JourneyScreenState extends State<JourneyScreen> {
+  late final JourneyAccessService _access;
+  late final JourneyService _journey;
+  JourneyTimeline? _timeline;
+  Object? _error;
+  bool _loading = true;
+  bool _authorized = false;
+  bool _redirectScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _access = widget.accessService ?? JourneyAccessService();
+    _journey = widget.journeyService ?? JourneyService();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final userId = _access.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    final authorized = await _access.canAccess();
+    if (!mounted || _access.currentUserId != userId) return;
+    if (!authorized) {
+      setState(() {
+        _loading = false;
+        _authorized = false;
+      });
+      _redirectUnauthorized();
+      return;
+    }
+    try {
+      final timeline = await _journey.load();
+      if (!mounted || _access.currentUserId != userId) return;
+      setState(() {
+        _timeline = timeline;
+        _authorized = true;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || _access.currentUserId != userId) return;
+      setState(() {
+        _error = error;
+        _authorized = true;
+        _loading = false;
+      });
+    }
+  }
+
+  void _redirectUnauthorized() {
+    if (_redirectScheduled) return;
+    _redirectScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const _JourneyLoading();
+    if (!_authorized) return const SizedBox.shrink();
+    if (_error != null || _timeline == null) return const _JourneyError();
+    final timeline = _timeline!;
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Our Journey'),
+        title: const Text('Your Journey'),
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _sectionTitle('Current Mission'),
-          const SizedBox(height: 12),
-
-          _infoCard(
-            backgroundColor: AppTheme.journeyCard,
-            child: const Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.white,
-                  child: Icon(
-                    Icons.flag_outlined,
-                    color: AppTheme.aiBlue,
-                    size: 28,
-                  ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          children: [
+            _ChapterHeader(stage: timeline.stage),
+            if (timeline.nextChapterTitle != null) ...[
+              const SizedBox(height: 20),
+              _NextChapter(timeline: timeline),
+            ],
+            const SizedBox(height: 28),
+            if (timeline.events.isEmpty)
+              const _EmptyJourney()
+            else
+              ...timeline.events.map((event) => _TimelineEvent(event: event)),
+            if (timeline.partial && timeline.events.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: Text(
+                  'Some optional history is temporarily unavailable. Your verified events remain here.',
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Build Future Project',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'Complete the core app experience',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 28),
-
-          _sectionTitle('Timeline'),
-          const SizedBox(height: 12),
-
-          _infoCard(
-            child: const Column(
-              children: [
-                _TimelineItem(
-                  icon: Icons.check_circle,
-                  iconColor: AppTheme.successGreen,
-                  title: 'Learn Flutter',
-                  subtitle: 'Completed',
-                ),
-                Divider(),
-                _TimelineItem(
-                  icon: Icons.autorenew,
-                  iconColor: AppTheme.gold,
-                  title: 'Build UI',
-                  subtitle: 'In progress',
-                ),
-                Divider(),
-                _TimelineItem(
-                  icon: Icons.radio_button_unchecked,
-                  iconColor: AppTheme.textSecondary,
-                  title: 'Firebase',
-                  subtitle: 'Upcoming',
-                ),
-                Divider(),
-                _TimelineItem(
-                  icon: Icons.radio_button_unchecked,
-                  iconColor: AppTheme.textSecondary,
-                  title: 'AI Integration',
-                  subtitle: 'Upcoming',
-                ),
-                Divider(),
-                _TimelineItem(
-                  icon: Icons.radio_button_unchecked,
-                  iconColor: AppTheme.textSecondary,
-                  title: 'Publish App',
-                  subtitle: 'Upcoming',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 28),
-
-          _sectionTitle('Progress'),
-          const SizedBox(height: 12),
-
-          _infoCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: const LinearProgressIndicator(
-                    value: 0.4,
-                    minHeight: 10,
-                    backgroundColor: AppTheme.journeyCard,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppTheme.aiBlue,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '40% completed',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '2 of 5 steps',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 28),
-
-          _sectionTitle('Next Milestone'),
-          const SizedBox(height: 12),
-
-          _infoCard(
-            backgroundColor: AppTheme.visionCard,
-            child: const Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.white,
-                  child: Icon(
-                    Icons.emoji_events_outlined,
-                    color: AppTheme.primaryGreen,
-                    size: 28,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Complete Dashboard',
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'Finish the main navigation and core cards',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 18,
-                  color: AppTheme.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 22,
-        fontWeight: FontWeight.w700,
-        color: AppTheme.textPrimary,
-      ),
-    );
-  }
-
-  Widget _infoCard({
-    required Widget child,
-    Color backgroundColor = AppTheme.card,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: AppTheme.border,
+              ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
-      child: child,
     );
   }
 }
 
-class _TimelineItem extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-
-  const _TimelineItem({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-  });
-
+class _ChapterHeader extends StatelessWidget {
+  final dynamic stage;
+  const _ChapterHeader({required this.stage});
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        icon,
-        color: iconColor,
-        size: 28,
+    final title = switch (stage.toString().split('.').last) {
+      'starting' => 'The beginning',
+      'building' => 'Building the foundation',
+      'becoming' => 'Becoming consistent',
+      _ => 'Living the change',
+    };
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.visionCard,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppTheme.border),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textPrimary,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(
-          fontSize: 14,
-          color: AppTheme.textSecondary,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'CURRENT CHAPTER',
+            style: TextStyle(
+              fontSize: 12,
+              letterSpacing: 1.2,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Your story is built from the progress you actually record.',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _NextChapter extends StatelessWidget {
+  final JourneyTimeline timeline;
+  const _NextChapter({required this.timeline});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: AppTheme.journeyCard,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppTheme.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'NEXT CHAPTER',
+          style: TextStyle(
+            fontSize: 12,
+            letterSpacing: 1.1,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          timeline.nextChapterTitle!,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        if (timeline.nextChapterMeaning?.isNotEmpty == true) ...[
+          const SizedBox(height: 5),
+          Text(
+            timeline.nextChapterMeaning!,
+            style: const TextStyle(color: AppTheme.textSecondary),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _TimelineEvent extends StatelessWidget {
+  final JourneyEvent event;
+  const _TimelineEvent({required this.event});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          margin: const EdgeInsets.only(top: 5, right: 14),
+          decoration: const BoxDecoration(
+            color: AppTheme.primaryGreen,
+            shape: BoxShape.circle,
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _formatJourneyDate(event.occurredAt),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                event.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                event.meaning,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Verified from ${event.verifiedSource}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.primaryGreen,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _EmptyJourney extends StatelessWidget {
+  const _EmptyJourney();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 40),
+    child: Column(
+      children: [
+        Icon(Icons.route_outlined, size: 42, color: AppTheme.textSecondary),
+        SizedBox(height: 14),
+        Text(
+          'Your Journey will grow automatically',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        SizedBox(height: 7),
+        Text(
+          'Verified progress will appear here as you record it.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+      ],
+    ),
+  );
+}
+
+String _formatJourneyDate(DateTime value) =>
+    '${_journeyMonth(value.month)} ${value.day}, ${value.year}';
+
+String _journeyMonth(int value) =>
+    const <String>[
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ][value < 1
+        ? 1
+        : value > 12
+        ? 12
+        : value];
+
+class _JourneyLoading extends StatelessWidget {
+  const _JourneyLoading();
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
+
+class _JourneyError extends StatelessWidget {
+  const _JourneyError();
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+    body: Center(child: Text('Journey is temporarily unavailable.')),
+  );
 }
