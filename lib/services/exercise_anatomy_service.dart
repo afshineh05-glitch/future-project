@@ -45,6 +45,28 @@ class ExerciseAnatomyService {
     return legacyMaleAssetFor(legacyExerciseName ?? '');
   }
 
+  static String? resolveApproved({
+    required ExerciseAnatomyProfile? profile,
+    String? maleAsset,
+    String? maleStatus,
+    String? femaleAsset,
+    String? femaleStatus,
+    String? legacyExerciseName,
+  }) {
+    final approvedMale = maleStatus?.startsWith('approved') == true
+        ? maleAsset
+        : null;
+    final approvedFemale = femaleStatus?.startsWith('approved') == true
+        ? femaleAsset
+        : null;
+    return resolve(
+      profile: profile,
+      maleAsset: approvedMale,
+      femaleAsset: approvedFemale,
+      legacyExerciseName: legacyExerciseName,
+    );
+  }
+
   static String? legacyMaleAssetFor(String exerciseName) {
     final String normalized = exerciseName.trim().toLowerCase().replaceAll(
       RegExp(r'\s+'),

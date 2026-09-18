@@ -1,0 +1,13 @@
+{
+    "generator_version":  1,
+    "prompt_version":  "muscleup_anatomy_locked_v4",
+    "total_jobs":  784,
+    "pending_jobs":  780,
+    "pending_review_jobs":  0,
+    "approved_jobs":  4,
+    "failed_jobs":  1,
+    "pending_review_candidates":  [
+
+                                  ],
+    "updated_at":  "2026-09-15T02:57:17.3195095Z"
+}

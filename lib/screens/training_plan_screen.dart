@@ -139,10 +139,12 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
                           libraryItem.secondaryMuscles;
                     }
                     exercise['resolved_anatomy_asset'] =
-                        ExerciseAnatomyService.resolve(
+                        ExerciseAnatomyService.resolveApproved(
                           profile: anatomyProfile,
                           maleAsset: libraryItem.maleAnatomyAsset,
+                          maleStatus: libraryItem.maleAnatomyStatus,
                           femaleAsset: libraryItem.femaleAnatomyAsset,
+                          femaleStatus: libraryItem.femaleAnatomyStatus,
                           legacyExerciseName: libraryItem.sourceName,
                         );
                     exercise['video_url'] =

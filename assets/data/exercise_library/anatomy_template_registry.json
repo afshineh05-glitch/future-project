@@ -1,0 +1,65 @@
+{
+  "templates": [
+    {
+      "template_id": "male_anatomy_master_v1",
+      "role": "card_template",
+      "sex": "male",
+      "path": "assets/exercises/anatomy/templates/male_anatomy_master_v1.png",
+      "sha256": "3C44E6F8ADB17B17D544E82EF33C72DD0FC799A35853294FD0923654371D391E",
+      "status": "historical_retired"
+    },
+    {
+      "template_id": "female_anatomy_master_v1",
+      "role": "card_template",
+      "sex": "female",
+      "path": "assets/exercises/anatomy/templates/female_anatomy_master_v1.png",
+      "sha256": "4D5205EACE3D7C2D8A99ADFFA180567A0D52B7EE070014EFE82E35A819DDD431",
+      "status": "historical_retired"
+    },
+    {
+      "template_id": "male_neutral_anatomy_master_v3",
+      "role": "card_template",
+      "sex": "male",
+      "path": "assets/exercises/anatomy/templates/male_neutral_anatomy_master_v3.png",
+      "sha256": "A6AB0866E7849F3B0CF583187B94EFF3CDA8981B54DDC11F2001D1AF5B47A228",
+      "status": "historical_retired"
+    },
+    {
+      "template_id": "female_neutral_anatomy_master_v3",
+      "role": "card_template",
+      "sex": "female",
+      "path": "assets/exercises/anatomy/templates/female_neutral_anatomy_master_v3.png",
+      "sha256": "08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057",
+      "status": "locked_immutable"
+    },
+    {
+      "template_id": "female_neutral_anatomy_artwork_reference_v3",
+      "role": "provider_artwork_reference",
+      "sex": "female",
+      "path": "assets/exercises/anatomy/templates/female_neutral_anatomy_artwork_reference_v3.png",
+      "sha256": "2A1C946F09F9B53C9E3452146E38D406847AF2DC2A992FDCA1E3FF0BA0627225",
+      "source_template_id": "female_neutral_anatomy_master_v3",
+      "source_sha256": "08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057",
+      "status": "locked_immutable_derived"
+    },
+    {
+      "template_id": "male_neutral_anatomy_master_v4",
+      "role": "provider_artwork_reference",
+      "sex": "male",
+      "path": "assets/exercises/anatomy/templates/male_neutral_anatomy_master_v4.png",
+      "sha256": "5FFE7590F204E01A1A1EC95B5D2312404B32A1FA59D2464E254D453254B95BD9",
+      "status": "locked_immutable",
+      "active": true
+    },
+    {
+      "template_id": "male_neutral_anatomy_artwork_reference_v3",
+      "role": "provider_artwork_reference",
+      "sex": "male",
+      "path": "assets/exercises/anatomy/templates/male_neutral_anatomy_artwork_reference_v3.png",
+      "sha256": "C9AE644FAF3F24D0351DA325DAD277E1A6BD8EE394B6A23C28D2925A72E7524C",
+      "source_template_id": "male_neutral_anatomy_master_v3",
+      "source_sha256": "A6AB0866E7849F3B0CF583187B94EFF3CDA8981B54DDC11F2001D1AF5B47A228",
+      "status": "historical_retired"
+    }
+  ]
+}

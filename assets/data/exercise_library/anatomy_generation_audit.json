@@ -1,0 +1,136 @@
+{
+    "events":  [
+                   {
+                       "at":  "2026-09-13T19:59:57.8259946Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "file_missing"
+                   },
+                   {
+                       "at":  "2026-09-13T20:00:45.4019525Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "file_missing"
+                   },
+                   {
+                       "at":  "2026-09-13T20:00:46.2315622Z",
+                       "job_id":  "mu_ex_barbell_bent_over_row_female",
+                       "action":  "failed",
+                       "details":  "file_missing"
+                   },
+                   {
+                       "at":  "2026-09-13T20:05:20.4653632Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "generated",
+                       "details":  "pending_review"
+                   },
+                   {
+                       "at":  "2026-09-13T20:05:33.6442210Z",
+                       "job_id":  "mu_ex_barbell_bent_over_row_female",
+                       "action":  "generated",
+                       "details":  "pending_review"
+                   },
+                   {
+                       "at":  "2026-09-13T20:59:36.5656921Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "rejected",
+                       "details":  "Garbled and misspelled text; incorrect exercise title; two front-facing bodies instead of front and back views; wrong black background; anatomically unrealistic circular chest highlights; incorrect locked layout; missing accurate Primary/Secondary legend; does not match the approved premium white anatomy-card format"
+                   },
+                   {
+                       "at":  "2026-09-13T20:59:42.0566287Z",
+                       "job_id":  "mu_ex_barbell_bent_over_row_female",
+                       "action":  "rejected",
+                       "details":  "Garbled and misspelled text; incorrect exercise title; two front-facing bodies instead of front and back views; wrong black background; anatomically unrealistic circular chest highlights; incorrect locked layout; missing accurate Primary/Secondary legend; does not match the approved premium white anatomy-card format"
+                   },
+                   {
+                       "at":  "2026-09-13T21:05:47.4420030Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "provider_exit_14"
+                   },
+                   {
+                       "at":  "2026-09-13T21:06:29.2698264Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "provider_exit_14"
+                   },
+                   {
+                       "at":  "2026-09-13T21:49:39.3275769Z",
+                       "job_id":  "mu_ex_barbell_bench_press_male",
+                       "action":  "failed",
+                       "details":  "artwork_validation_failed: "
+                   },
+                   {
+                       "at":  "2026-09-14T04:04:45.0613712Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "OpenAI image request failed."
+                   },
+                   {
+                       "at":  "2026-09-14T04:19:46.4446439Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "generated",
+                       "details":  "{\"semantic_validation\":\"pending_human_review\",\"height\":1024,\"model\":\"gpt-image-1.5\",\"estimated_cost_usd\":0.009,\"provider_id\":\"openai\",\"template_id\":\"female_neutral_anatomy_master_v3\",\"prompt_version\":\"muscleup_anatomy_locked_v3\",\"template_sha256\":\"08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057\",\"bytes\":1106615,\"width\":1024,\"valid\":true,\"generated_at\":\"2026-09-14T04:19:46.4094191Z\"}"
+                   },
+                   {
+                       "at":  "2026-09-14T04:26:55.1589446Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "rejected",
+                       "details":  "{\"reason\":\"Validated secondary anterior deltoids are not distinctly highlighted orange.\",\"output_path\":\"assets/exercises/anatomy/candidates/female/mu_ex_barbell_bench_press_v2.png\",\"validation_result\":{\"semantic_validation\":{\"review\":\"manual_visual_review\",\"correct_sex\":true,\"true_front_view\":true,\"true_back_view\":true,\"white_locked_card_layout\":true,\"exact_title\":true,\"exact_readable_labels\":true,\"chest_red\":true,\"triceps_orange\":true,\"anterior_deltoids_orange\":false,\"unrelated_highlights_detected\":false,\"inherited_labels_detected\":false,\"malformed_anatomy_detected\":false,\"summary\":\"Pending human review: anterior deltoids are not distinctly highlighted orange.\"},\"provider_response\":{\"category\":\"success\",\"http_status\":200,\"request_id\":null,\"note\":\"Request ID was not retained by the caller in this completed request; caller persistence is now repaired.\"},\"height\":1024,\"model\":\"gpt-image-1.5\",\"estimated_cost_usd\":0.009,\"provider_id\":\"openai\",\"template_id\":\"female_neutral_anatomy_master_v3\",\"prompt_version\":\"muscleup_anatomy_locked_v3\",\"template_sha256\":\"08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057\",\"bytes\":1106615,\"width\":1024,\"valid\":true,\"generated_at\":\"2026-09-14T04:19:46.4094191Z\"}}"
+                   },
+                   {
+                       "at":  "2026-09-14T04:29:13.3091251Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "generated",
+                       "details":  "{\"height\":1024,\"semantic_validation\":\"pending_human_review\",\"width\":1024,\"template_sha256\":\"08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057\",\"model\":\"gpt-image-1.5\",\"provider_response\":{\"category\":\"success\",\"http_status\":200,\"request_id\":\"req_7522addbae3f40caa18a7ce1d58c19e8\"},\"bytes\":690861,\"template_id\":\"female_neutral_anatomy_master_v3\",\"prompt_version\":\"muscleup_anatomy_locked_v3\",\"provider_id\":\"openai\",\"generated_at\":\"2026-09-14T04:29:13.2762657Z\",\"valid\":true,\"estimated_cost_usd\":0.009}"
+                   },
+                   {
+                       "at":  "2026-09-14T04:29:44.5485136Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "rejected",
+                       "details":  "{\"reason\":\"V3 semantic validation failed: required Barbell Bench Press title is missing; triceps are not highlighted orange; back-view shoulder caps are orange even though anterior deltoids must be highlighted on the front view only.\",\"output_path\":\"assets/exercises/anatomy/candidates/female/mu_ex_barbell_bench_press_v3.png\",\"validation_result\":{\"height\":1024,\"semantic_validation\":\"pending_human_review\",\"width\":1024,\"template_sha256\":\"08B6D1124802BD7CDBDA31107A3C4D68990FF5CC2AFD354F2F07F936998C5057\",\"model\":\"gpt-image-1.5\",\"provider_response\":{\"category\":\"success\",\"http_status\":200,\"request_id\":\"req_7522addbae3f40caa18a7ce1d58c19e8\"},\"bytes\":690861,\"template_id\":\"female_neutral_anatomy_master_v3\",\"prompt_version\":\"muscleup_anatomy_locked_v3\",\"provider_id\":\"openai\",\"generated_at\":\"2026-09-14T04:29:13.2762657Z\",\"valid\":true,\"estimated_cost_usd\":0.009}}"
+                   },
+                   {
+                       "at":  "2026-09-14T04:40:10.7076718Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "validation_failed_before_render",
+                       "details":  "orange_back_shoulder_caps_forbidden"
+                   },
+                   {
+                       "at":  "2026-09-14T04:40:30.9157797Z",
+                       "job_id":  "mu_ex_barbell_bench_press_female",
+                       "action":  "failed",
+                       "details":  "provider_exit_14"
+                   },
+                   {
+                       "at":  "2026-09-15T02:35:12.7026902Z",
+                       "job_id":  "mu_ex_barbell_bench_press_male",
+                       "action":  "failed",
+                       "details":  "{\"category\":\"safety_rejection\",\"http_status\":400,\"error_type\":\"image_generation_user_error\",\"error_code\":\"moderation_blocked\",\"error_param\":null,\"message\":\"Your request was rejected by the safety system. If you believe this is an error, contact support and include the request ID.\",\"request_id\":\"req_2c75abe38c924eb6b002127d231c8a33\"}"
+                   },
+                   {
+                       "at":  "2026-09-15T02:56:42.0374539Z",
+                       "job_id":  "mu_ex_machine_leg_press_male",
+                       "action":  "generated",
+                       "details":  "{\"width\":1024,\"bytes\":501863,\"generated_at\":\"2026-09-15T02:56:41.9884819Z\",\"model\":\"gpt-image-1.5\",\"valid\":true,\"provider_response\":{\"category\":\"success\",\"http_status\":200,\"request_id\":\"req_5265db3dc3fa4d4088bbd5da4eb619ec\"},\"prompt_version\":\"muscleup_anatomy_locked_v4\",\"template_id\":\"male_neutral_anatomy_master_v4\",\"provider_id\":\"openai\",\"artwork_validation\":{\"valid\":true,\"text_detected\":false,\"renderer_allowed\":true,\"sex\":\"male\",\"rules\":\"male_catalog_color_isolation\",\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"pixel_metrics\":{\"red_samples\":18123,\"orange_samples\":12476,\"front_body_samples\":38563,\"back_body_samples\":39498,\"non_white_margin_samples\":0,\"red_chest_samples\":0,\"orange_front_deltoid_samples\":0,\"orange_back_triceps_samples\":259,\"orange_back_shoulder_samples\":0,\"unrelated_bench_color_samples\":18228}},\"renderer_fields\":{\"title\":\"Machine Leg Press\",\"fixed_text\":[\"Muscles Worked\",\"Primary\",\"Secondary\",\"Primary Muscles\",\"Secondary Muscles\",\"Front View\",\"Back View\"],\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"output_path\":\"C:\\\\Users\\\\afshi\\\\future_project\\\\assets\\\\exercises\\\\anatomy\\\\candidates\\\\male\\\\mu_ex_machine_leg_press_v2.png\",\"width\":1024,\"height\":1024,\"text_source\":\"deterministic_renderer_inputs\"},\"template_sha256\":\"5FFE7590F204E01A1A1EC95B5D2312404B32A1FA59D2464E254D453254B95BD9\",\"height\":1024,\"estimated_cost_usd\":0.009,\"artwork_path\":\"assets/exercises/anatomy/candidates/male/mu_ex_machine_leg_press_v2_artwork.png\"}"
+                   },
+                   {
+                       "at":  "2026-09-15T02:57:17.2226486Z",
+                       "job_id":  "mu_ex_machine_leg_press_male",
+                       "action":  "rejected",
+                       "details":  "{\"reason\":\"Semantic validation failed: both calves are highlighted orange, but catalog secondary muscles are only hamstrings and adductors. Unrelated highlights are forbidden.\",\"output_path\":\"assets/exercises/anatomy/candidates/male/mu_ex_machine_leg_press_v2.png\",\"validation_result\":{\"width\":1024,\"bytes\":501863,\"generated_at\":\"2026-09-15T02:56:41.9884819Z\",\"model\":\"gpt-image-1.5\",\"valid\":true,\"provider_response\":{\"category\":\"success\",\"http_status\":200,\"request_id\":\"req_5265db3dc3fa4d4088bbd5da4eb619ec\"},\"prompt_version\":\"muscleup_anatomy_locked_v4\",\"template_id\":\"male_neutral_anatomy_master_v4\",\"provider_id\":\"openai\",\"artwork_validation\":{\"valid\":true,\"text_detected\":false,\"renderer_allowed\":true,\"sex\":\"male\",\"rules\":\"male_catalog_color_isolation\",\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"pixel_metrics\":{\"red_samples\":18123,\"orange_samples\":12476,\"front_body_samples\":38563,\"back_body_samples\":39498,\"non_white_margin_samples\":0,\"red_chest_samples\":0,\"orange_front_deltoid_samples\":0,\"orange_back_triceps_samples\":259,\"orange_back_shoulder_samples\":0,\"unrelated_bench_color_samples\":18228}},\"renderer_fields\":{\"title\":\"Machine Leg Press\",\"fixed_text\":[\"Muscles Worked\",\"Primary\",\"Secondary\",\"Primary Muscles\",\"Secondary Muscles\",\"Front View\",\"Back View\"],\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"output_path\":\"C:\\\\Users\\\\afshi\\\\future_project\\\\assets\\\\exercises\\\\anatomy\\\\candidates\\\\male\\\\mu_ex_machine_leg_press_v2.png\",\"width\":1024,\"height\":1024,\"text_source\":\"deterministic_renderer_inputs\"},\"template_sha256\":\"5FFE7590F204E01A1A1EC95B5D2312404B32A1FA59D2464E254D453254B95BD9\",\"height\":1024,\"estimated_cost_usd\":0.009,\"artwork_path\":\"assets/exercises/anatomy/candidates/male/mu_ex_machine_leg_press_v2_artwork.png\"}}"
+                   },
+                   {
+                       "at":  "2026-09-15T03:03:03.7029998Z",
+                       "job_id":  "mu_ex_machine_leg_press_male",
+                       "action":  "deterministic_candidate_generated",
+                       "details":  "{\"valid\":true,\"mode\":\"deterministic_mask_compositor\",\"width\":1024,\"height\":1024,\"master_path\":\"assets/exercises/anatomy/templates/male_neutral_anatomy_master_v4.png\",\"master_sha256\":\"5FFE7590F204E01A1A1EC95B5D2312404B32A1FA59D2464E254D453254B95BD9\",\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"artwork_path\":\"assets/exercises/anatomy/candidates/male/mu_ex_machine_leg_press_v3_artwork.png\",\"renderer_fields\":{\"title\":\"Machine Leg Press\",\"fixed_text\":[\"Muscles Worked\",\"Primary\",\"Secondary\",\"Primary Muscles\",\"Secondary Muscles\",\"Front View\",\"Back View\"],\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"output_path\":\"C:\\\\Users\\\\afshi\\\\future_project\\\\assets\\\\exercises\\\\anatomy\\\\candidates\\\\male\\\\mu_ex_machine_leg_press_v3.png\",\"width\":1024,\"height\":1024,\"text_source\":\"deterministic_renderer_inputs\"},\"generated_at\":\"2026-09-15T03:03:03.6197977Z\",\"estimated_cost_usd\":0}"
+                   },
+                   {
+                       "at":  "2026-09-15T03:04:37.8218315Z",
+                       "job_id":  "mu_ex_machine_leg_press_male",
+                       "action":  "deterministic_candidate_generated",
+                       "details":  "{\"valid\":true,\"mode\":\"deterministic_mask_compositor\",\"width\":1024,\"height\":1024,\"master_path\":\"assets/exercises/anatomy/templates/male_neutral_anatomy_master_v4.png\",\"master_sha256\":\"5FFE7590F204E01A1A1EC95B5D2312404B32A1FA59D2464E254D453254B95BD9\",\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"artwork_path\":\"assets/exercises/anatomy/candidates/male/mu_ex_machine_leg_press_v4_artwork.png\",\"renderer_fields\":{\"title\":\"Machine Leg Press\",\"fixed_text\":[\"Muscles Worked\",\"Primary\",\"Secondary\",\"Primary Muscles\",\"Secondary Muscles\",\"Front View\",\"Back View\"],\"primary_muscles\":[\"quadriceps\",\"glutes\"],\"secondary_muscles\":[\"hamstrings\",\"adductors\"],\"output_path\":\"C:\\\\Users\\\\afshi\\\\future_project\\\\assets\\\\exercises\\\\anatomy\\\\candidates\\\\male\\\\mu_ex_machine_leg_press_v4.png\",\"width\":1024,\"height\":1024,\"text_source\":\"deterministic_renderer_inputs\"},\"generated_at\":\"2026-09-15T03:04:37.5222128Z\",\"estimated_cost_usd\":0}"
+                   }
+               ]
+}
