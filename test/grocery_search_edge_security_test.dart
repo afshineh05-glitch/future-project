@@ -39,12 +39,27 @@ void main() {
   });
 
   test('Serper queries are Canada-localized and domain restricted', () {
-    expect(source, contains('https://google.serper.dev/search'));
+    expect(source, contains(r'https://google.serper.dev/${path}'));
+    expect(source, contains('const shoppingPayload = await serperRequest('));
+    expect(source, contains('"shopping",'));
+    expect(source, contains('shoppingPayload.shopping'));
+    expect(source, contains(r'`${terms[0]} Montreal Canada`'));
     expect(source, contains('retailerDomains.map'));
     expect(source, contains(r'`site:${domain}`'));
     expect(source, contains('Montreal Quebec Canada'));
     expect(source, contains('location: "Montreal, Quebec, Canada"'));
-    expect(source, contains('payload.organic'));
+    expect(source, contains('fallbackPayload.organic'));
+    expect(source, contains('if (results.length === 0)'));
+  });
+
+  test('nearby deals retain the strict general-search path', () {
+    expect(source, contains('if (pass === "regularPrice")'));
+    expect(
+      source,
+      contains('const dealPayload = await serperRequest("search", query)'),
+    );
+    expect(source, contains('rejectionReasons(evidence, pass, terms)'));
+    expect(source, contains('candidateDistance <= radius'));
   });
 
   test('untrusted discovery results require explicit commerce evidence', () {
@@ -70,14 +85,24 @@ void main() {
   test('page evidence and aggregate rejection diagnostics remain safe', () {
     expect(source, contains('parseRetailerPage(html)'));
     expect(source, contains('rejectionReasons(evidence, pass, terms)'));
-    expect(
-      source,
-      contains('diagnostics: { fetchedPages, rejected, onlineOnly }'),
-    );
+    expect(source, contains('fetchedPages,'));
     expect(source, contains('onlineOnly.missing_location'));
     expect(source, contains('onlineOnly.missing_package'));
     expect(source, contains('onlineOnly.missing_availability'));
     expect(source, contains('onlineOnly.outside_radius'));
+    expect(source, contains('shoppingHttpStatus'));
+    expect(source, contains('shoppingResultsReceived'));
+    expect(source, contains('shoppingResultsWithParsedCadPrice'));
+    expect(source, contains('shoppingResultsWithOffers'));
+    expect(source, contains('shoppingOfferFieldNames'));
+    expect(source, contains('organicFallbackRequested'));
+    expect(source, contains('MAX_MERCHANT_RESOLUTIONS'));
+    expect(source, contains(r'`site:${candidate.domain} "${title}"`'));
+    expect(source, contains('merchantResolutionAttempted'));
+    expect(source, contains('merchantResolutionSucceeded'));
+    expect(source, contains('merchantResolutionRejected'));
+    expect(source, contains('acceptedShopping'));
+    expect(source, contains('shopping_provider_http_error'));
     expect(source, contains('duplicate'));
     expect(source, isNot(contains('SERPER_API_KEY:')));
     expect(
