@@ -15,7 +15,7 @@ import 'package:future_project/screens/ingredient_image_curator_screen.dart';
 import 'package:future_project/services/intelligent_fridge_service.dart';
 import 'package:future_project/services/deals_location_service.dart';
 import 'package:future_project/services/grocery_deals_engine.dart';
-import 'package:future_project/services/google_grocery_search_provider.dart';
+import 'package:future_project/services/serper_grocery_search_provider.dart';
 import 'package:future_project/services/ingredient_image_service.dart';
 import 'package:future_project/theme/app_theme.dart';
 
@@ -93,7 +93,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
     _locationService = SupabaseDealsLocationService();
     _dealsEngine = GroceryDealsEngine(
       locationService: _locationService,
-      provider: GoogleGrocerySearchProvider(),
+      provider: SerperGrocerySearchProvider(),
     );
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       event,

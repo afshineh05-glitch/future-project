@@ -26,6 +26,12 @@ const retailerDomains = [
   "nofrills.ca", "walmart.ca", "superc.ca", "foodbasics.ca",
   "sobeys.com", "safeway.ca", "costco.ca",
 ];
+const retailerNames: Record<string, string> = {
+  "metro.ca": "Metro", "iga.net": "IGA", "provigo.ca": "Provigo",
+  "maxi.ca": "Maxi", "loblaws.ca": "Loblaws", "nofrills.ca": "No Frills",
+  "walmart.ca": "Walmart", "superc.ca": "Super C", "foodbasics.ca": "Food Basics",
+  "sobeys.com": "Sobeys", "safeway.ca": "Safeway", "costco.ca": "Costco",
+};
 const isRetailerUrl = (value: string) => {
   try {
     const url = new URL(value);
@@ -41,7 +47,56 @@ const number = (v: unknown) => {
   const n = Number(String(v ?? "").replace(/[^0-9.]/g, ""));
   return Number.isFinite(n) && n > 0 ? n : null;
 };
-const first = (v: unknown) => Array.isArray(v) ? v[0] : v;
+const retailerForUrl = (value: string) => {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    const domain = retailerDomains.find((candidate) =>
+      host === candidate || host.endsWith(`.${candidate}`)
+    );
+    return domain ? { domain, name: retailerNames[domain] } : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const textOf = (item: Record<string, unknown>) =>
+  [item.title, item.snippet, item.date].filter((value) => typeof value === "string").join(" ");
+
+function explicitPrice(text: string) {
+  const cad = text.match(/(?:CAD\s*\$?\s*(\d{1,4}(?:[.,]\d{2})?)|\$\s*(\d{1,4}(?:[.,]\d{2})?)\s*CAD)\b/i);
+  return cad ? number((cad[1] ?? cad[2]).replace(",", ".")) : null;
+}
+
+function explicitRegularPrice(text: string) {
+  const match = text.match(/(?:regular(?:ly)?|was|reg\.?|list price)\s*(?:price)?\s*[:\-]?\s*(?:CAD\s*)?\$\s*(\d{1,4}(?:[.,]\d{2})?)/i);
+  return match ? number(match[1].replace(",", ".")) : null;
+}
+
+function explicitPackage(text: string) {
+  const match = text.match(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)\b/i);
+  if (!match) return null;
+  const raw = Number(match[1].replace(",", "."));
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  return {
+    quantity: unit === "kg" || unit === "l" ? raw * 1000 : raw,
+    unitType: unit === "l" || unit === "ml" ? "volume" : "mass",
+  };
+}
+
+function explicitPostal(text: string) {
+  const match = text.toUpperCase().match(/\b[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ][ -]?\d[ABCEGHJKLMNPRSTVWXYZ]\d\b/);
+  if (!match) return null;
+  const compact = match[0].replace(/[ -]/g, "");
+  return `${compact.slice(0, 3)} ${compact.slice(3)}`;
+}
+
+function explicitValidUntil(text: string) {
+  const match = text.match(/(?:valid|ends?|until|through)\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/);
+  if (!match) return null;
+  const date = new Date(match[1]);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
 
 async function geocode(value: string, key: string) {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
@@ -98,56 +153,55 @@ Deno.serve(async (req) => {
     if (rateError || allowed !== true) {
       return Response.json({ error: "Rate limit exceeded" }, { status: 429, headers: cors });
     }
-    const apiKey = Deno.env.get("GOOGLE_CSE_API_KEY");
-    const cx = Deno.env.get("GOOGLE_CSE_CX");
+    const apiKey = Deno.env.get("SERPER_API_KEY");
     const mapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-    if (!apiKey || !cx || !mapsKey) return Response.json({ results: [], configured: false }, { headers: cors });
-    const query = `"${terms[0]}" ${pass === "deal" ? "sale flyer" : "price"} grocery ${postal} Canada -sponsored`;
-    const search = new URL("https://www.googleapis.com/customsearch/v1");
-    search.searchParams.set("key", apiKey); search.searchParams.set("cx", cx);
-    search.searchParams.set("q", query); search.searchParams.set("gl", "ca"); search.searchParams.set("cr", "countryCA");
-    const response = await fetch(search);
-    if (!response.ok) throw new Error(`Google search ${response.status}`);
+    if (!apiKey || !mapsKey) return Response.json({ results: [], configured: false }, { headers: cors });
+    const sites = retailerDomains.map((domain) => `site:${domain}`).join(" OR ");
+    const intent = pass === "deal" ? "sale flyer deal regular price valid until in stock" : "price CAD in stock";
+    const query = `"${terms[0]}" ${intent} "${postal}" Montreal Quebec Canada (${sites}) -sponsored`;
+    const response = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query, gl: "ca", hl: "en", location: "Montreal, Quebec, Canada", num: 10 }),
+    });
+    if (!response.ok) throw new Error(`Search provider ${response.status}`);
     const payload = await response.json();
     const origin = await geocode(postal, mapsKey);
     if (!origin) return Response.json({ results: [] }, { headers: cors });
     const results = [];
-    for (const item of payload.items ?? []) {
-      const product = first(item.pagemap?.product);
-      const offer = first(item.pagemap?.offer ?? product?.offers);
-      const business = first(item.pagemap?.localbusiness ?? item.pagemap?.organization);
+    for (const raw of payload.organic ?? []) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
       const sourceUrl = String(item.link ?? "");
-      const productName = String(product?.name ?? item.title ?? "");
+      const retailer = retailerForUrl(sourceUrl);
+      if (!retailer || !isRetailerUrl(sourceUrl)) continue;
+      const evidence = textOf(item);
+      const productName = String(item.title ?? "").trim();
       const lower = productName.toLowerCase();
-      if (!terms.some((term) => lower.includes(term)) || !isRetailerUrl(sourceUrl)) continue;
-      const price = number(offer?.price ?? product?.price);
-      const regularPrice = number(offer?.highprice ?? offer?.listprice);
-      const currency = String(offer?.pricecurrency ?? product?.pricecurrency ?? "").toUpperCase();
-      const storeName = String(business?.name ?? offer?.seller?.name ?? "").trim();
-      const storePostal = String(business?.postalcode ?? business?.address?.postalcode ?? "").toUpperCase().trim();
-      const validUntil = offer?.validthrough ? new Date(offer.validthrough) : null;
-      const availability = String(offer?.availability ?? "").toLowerCase();
-      if (!price || currency !== "CAD" || !storeName || !postalPattern.test(storePostal)) continue;
-      if (pass === "deal" && (!regularPrice || regularPrice <= price || !validUntil || !Number.isFinite(validUntil.getTime()))) continue;
+      const price = explicitPrice(evidence);
+      const regularPrice = explicitRegularPrice(evidence);
+      const storePostal = explicitPostal(evidence);
+      const packageInfo = explicitPackage(evidence);
+      const validUntil = explicitValidUntil(evidence);
+      const availabilityVerified = /\b(in[ -]?stock|available (?:now|today|at))\b/i.test(evidence);
+      if (!terms.some((term) => lower.includes(term)) || !price || !storePostal ||
+        !packageInfo || !availabilityVerified || !/\b(CAD|Canada|Canadian|QC|Quebec|Montreal)\b/i.test(evidence)) continue;
+      if (pass === "deal" && (!/\b(sale|deal|flyer|save)\b/i.test(evidence) ||
+        !regularPrice || regularPrice <= price || !validUntil)) continue;
       const destination = await geocode(storePostal, mapsKey);
       if (!destination) continue;
       const distanceKm = km(origin, destination);
       if (distanceKm > radius) continue;
-      const packageMatch = productName.match(/(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b/i);
-      const rawQty = packageMatch ? Number(packageMatch[1]) : null;
-      const rawUnit = packageMatch?.[2]?.toLowerCase();
-      const packageQuantity = rawQty == null ? null : (rawUnit === "kg" || rawUnit === "l") ? rawQty * 1000 : rawQty;
-      const packageUnitType = rawUnit == null ? null : (rawUnit === "l" || rawUnit === "ml") ? "volume" : "mass";
       results.push({
-        id: String(item.cacheId ?? sourceUrl), productName, storeName,
+        id: sourceUrl, productName, storeName: retailer.name,
         storePostalCode: storePostal, distanceKm, price, regularPrice,
         currency: "CAD", priceKind: pass === "deal" ? "sale" : "regular",
-        packageQuantity, packageUnitType,
+        packageQuantity: packageInfo.quantity, packageUnitType: packageInfo.unitType,
         validUntil: validUntil?.toISOString() ?? null,
-        matchConfidence: 0.9, dealConfidence: pass === "deal" ? 0.9 : 1,
-        sourceUrl, sourceName: new URL(sourceUrl).hostname,
+        matchConfidence: 0.8, dealConfidence: pass === "deal" ? 0.8 : 1,
+        sourceUrl, sourceName: new URL(sourceUrl).hostname.toLowerCase(),
         verifiedAt: new Date().toISOString(),
-        availabilityVerified: availability.includes("instock") || availability.includes("limitedavailability"),
+        availabilityVerified,
         sponsoredOnly: false,
       });
     }

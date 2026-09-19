@@ -2,10 +2,12 @@ import 'package:future_project/models/grocery_deals.dart';
 import 'package:future_project/services/grocery_deals_engine.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class GoogleGrocerySearchProvider implements GrocerySearchProvider {
+/// Keeps Serper credentials and provider-specific behavior behind the Edge
+/// Function. Flutter sends and receives only the stable Deals Engine contract.
+class SerperGrocerySearchProvider implements GrocerySearchProvider {
   final SupabaseClient _supabase;
 
-  GoogleGrocerySearchProvider({SupabaseClient? supabase})
+  SerperGrocerySearchProvider({SupabaseClient? supabase})
     : _supabase = supabase ?? Supabase.instance.client;
 
   @override

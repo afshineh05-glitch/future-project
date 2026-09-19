@@ -221,6 +221,37 @@ void main() {
     },
   );
 
+  test('results without explicit package evidence are rejected', () async {
+    final provider = _Provider(
+      (request) => [
+        GrocerySearchResult(
+          id: 'missing-package',
+          productName: 'Fresh Chicken Breast',
+          storeName: 'Local Store',
+          storeLocation: const StoreLocation(postalCode: 'M5V 1A1'),
+          price: 10,
+          currency: 'CAD',
+          priceKind: request.pass == GrocerySearchPass.deal
+              ? GroceryPriceKind.sale
+              : GroceryPriceKind.regular,
+          regularPrice: request.pass == GrocerySearchPass.deal ? 15 : null,
+          validUntil: request.pass == GrocerySearchPass.deal
+              ? DateTime.utc(2026, 9, 18)
+              : null,
+          providerDistanceKm: 2,
+          sourceUri: Uri.parse('https://retailer.example/chicken'),
+          sourceName: 'retailer.example',
+          verifiedAt: DateTime.utc(2026, 9, 17),
+          availabilityVerified: true,
+        ),
+      ],
+    );
+
+    final outcome = await _engine(provider).findPrices([_need()]);
+
+    expect(outcome.status, DealsResultStatus.noReliablePrice);
+  });
+
   test('duplicate concurrent searches share one provider operation', () async {
     final gate = Completer<List<GrocerySearchResult>>();
     final provider = _AsyncProvider((_) => gate.future);

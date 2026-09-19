@@ -188,11 +188,10 @@ class GroceryDealsEngine {
           if (distance == null || distance > area.radiusKm || distance < 0) {
             return null;
           }
-          if ((result.packageQuantity == null) !=
-                  (result.packageUnitType == null) ||
-              (result.packageQuantity != null &&
-                  (!result.packageQuantity!.isFinite ||
-                      result.packageQuantity! <= 0))) {
+          if (result.packageQuantity == null ||
+              result.packageUnitType == null ||
+              !result.packageQuantity!.isFinite ||
+              result.packageQuantity! <= 0) {
             return null;
           }
           final normalized = PriceNormalizer.perCanonicalUnit(
