@@ -61,3 +61,21 @@ class GroceryListRow extends StatelessWidget {
     ),
   );
 }
+
+class GrocerySourceLinkButton extends StatelessWidget {
+  final Uri source;
+  final VoidCallback onPressed;
+
+  const GrocerySourceLinkButton({
+    super.key,
+    required this.source,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: 'Open retailer source',
+    onPressed: onPressed,
+    icon: const Icon(Icons.open_in_new, size: 18),
+  );
+}

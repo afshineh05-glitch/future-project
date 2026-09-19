@@ -33,6 +33,22 @@ void main() {
     expect(taps, 2);
   });
 
+  testWidgets('retailer source link is clickable', (tester) async {
+    var opened = false;
+    final source = Uri.parse('https://metro.ca/product/chicken');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GrocerySourceLinkButton(
+          source: source,
+          onPressed: () => opened = true,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open retailer source'));
+    expect(opened, isTrue);
+  });
+
   test(
     'selects one canonical item with its existing required quantity',
     () async {

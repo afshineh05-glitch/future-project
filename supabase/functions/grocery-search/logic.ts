@@ -187,6 +187,10 @@ export function rejectionReasons(
   return reasons;
 }
 
+export function blockingReasonsForOnline(reasons: string[]) {
+  return reasons.filter((reason) => reason !== "missing_location");
+}
+
 export function evidenceKey(evidence: PageEvidence) {
   return [
     evidence.productName.toLowerCase(), evidence.price, evidence.packageQuantity,

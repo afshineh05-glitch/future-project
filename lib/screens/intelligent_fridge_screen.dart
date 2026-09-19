@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:future_project/debug/ingredient_image_refresh_key.dart';
 import 'package:future_project/models/cook_for_goal_recipe.dart';
@@ -653,8 +654,8 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
                       Expanded(
                         child: _section(
                           _itemDealsController.state.selectedItem == null
-                              ? 'Nearby Grocery Prices'
-                              : 'Nearby Grocery Prices · '
+                              ? 'Grocery Prices'
+                              : 'Grocery Prices · '
                                     '${_itemDealsController.state.selectedItem!.food.name}',
                         ),
                       ),
@@ -908,82 +909,114 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
       );
     }
     final outcome = dealsState.outcome!;
-    final message = switch (outcome.status) {
-      DealsResultStatus.shoppingAreaRequired =>
-        'Set your Canadian postal code and radius to find verified nearby prices.',
-      DealsResultStatus.noReliablePrice =>
-        'We could not verify a nearby price for this item. Online listings may exist, but their location or product details were not verifiable.',
-      _ => null,
-    };
-    if (message != null) {
+    if (outcome.status == DealsResultStatus.shoppingAreaRequired) {
       return _EmptyCard(
-        message,
-        action: outcome.status == DealsResultStatus.shoppingAreaRequired
-            ? TextButton(
-                onPressed: _editShoppingArea,
-                child: const Text('Set area'),
-              )
-            : null,
+        'Set your Canadian postal code and radius to find verified nearby prices.',
+        action: TextButton(
+          onPressed: _editShoppingArea,
+          child: const Text('Set area'),
+        ),
+      );
+    }
+    final nearby = outcome.nearbyRecommendations;
+    final online = outcome.onlineRecommendations;
+    if (nearby.isEmpty && online.isEmpty) {
+      return const _EmptyCard(
+        'We could not verify a price for this item. Online listings may exist, but their product, availability, or location evidence was incomplete.',
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          outcome.status == DealsResultStatus.dealsFound
-              ? 'On sale nearby'
-              : 'Regular price',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        ...outcome.recommendations.map((recommendation) {
-          final result = recommendation.result;
-          final package = result.packageQuantity == null
-              ? null
-              : _dealQuantity(result.packageQuantity!, result.packageUnitType!);
-          final normalized = recommendation.normalizedPrice == null
-              ? null
-              : '\$${recommendation.normalizedPrice!.toStringAsFixed(2)} per '
-                    '${result.packageUnitType == FoodUnitType.volume
-                        ? 'L'
-                        : result.packageUnitType == FoodUnitType.count
-                        ? 'item'
-                        : 'kg'}';
-          final validity = result.validUntil == null
-              ? null
-              : 'Valid until ${_shortDate(result.validUntil!)}';
-          return _Surface(
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                recommendation.isDeal
-                    ? Icons.local_offer_outlined
-                    : Icons.storefront_outlined,
-                color: AppTheme.primaryGreen,
-              ),
-              title: Text('${recommendation.foodName} · ${result.storeName}'),
-              subtitle: Text(
-                [
-                  recommendation.isDeal
-                      ? 'ON SALE'
-                      : 'BEST NEARBY REGULAR PRICE',
-                  ?package,
-                  ?normalized,
-                  'Location verified · ${result.storeLocation.postalCode ?? 'distance verified'}',
-                  '${recommendation.distanceKm.toStringAsFixed(1)} km away',
-                  ?validity,
-                  'Source: ${result.sourceUri}',
-                ].join(' · '),
-              ),
-              trailing: Text(
-                '${result.currency} ${result.price.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          );
-        }),
+        if (nearby.isNotEmpty) ...[
+          const Text(
+            'Verified nearby deals',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ...nearby.map((recommendation) => _dealResultTile(recommendation)),
+        ],
+        if (online.isNotEmpty) ...[
+          if (nearby.isNotEmpty) const SizedBox(height: 10),
+          const Text(
+            'Online store prices',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ...online.map((recommendation) => _dealResultTile(recommendation)),
+        ],
       ],
     );
+  }
+
+  Widget _dealResultTile(GroceryRecommendation recommendation) {
+    final result = recommendation.result;
+    final package = result.packageQuantity == null
+        ? null
+        : _dealQuantity(result.packageQuantity!, result.packageUnitType!);
+    final normalized = recommendation.normalizedPrice == null
+        ? null
+        : '\$${recommendation.normalizedPrice!.toStringAsFixed(2)} per '
+              '${result.packageUnitType == FoodUnitType.volume
+                  ? 'L'
+                  : result.packageUnitType == FoodUnitType.count
+                  ? 'item'
+                  : 'kg'}';
+    final validity = result.validUntil == null
+        ? null
+        : 'Valid until ${_shortDate(result.validUntil!)}';
+    final location = recommendation.isVerifiedNearby
+        ? 'Location verified · ${result.storeLocation.postalCode ?? 'distance verified'} · ${recommendation.distanceKm!.toStringAsFixed(1)} km away'
+        : 'Location/distance not verified';
+    return _Surface(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        onTap: result.sourceUri == null
+            ? null
+            : () => _openDealSource(result.sourceUri!),
+        leading: Icon(
+          recommendation.isDeal
+              ? Icons.local_offer_outlined
+              : Icons.storefront_outlined,
+          color: AppTheme.primaryGreen,
+        ),
+        title: Text('${recommendation.foodName} · ${result.storeName}'),
+        subtitle: Text(
+          [
+            recommendation.isDeal
+                ? recommendation.isVerifiedNearby
+                      ? 'ON SALE'
+                      : 'SALE ONLINE PRICE'
+                : recommendation.isVerifiedNearby
+                ? 'VERIFIED NEARBY REGULAR PRICE'
+                : 'Regular online price',
+            ?package,
+            ?normalized,
+            location,
+            ?validity,
+            'Source: ${result.sourceUri}',
+          ].join(' · '),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${result.currency} ${result.price.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            if (result.sourceUri != null)
+              GrocerySourceLinkButton(
+                source: result.sourceUri!,
+                onPressed: () => _openDealSource(result.sourceUri!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDealSource(Uri source) async {
+    await launchUrl(source, mode: LaunchMode.externalApplication);
   }
 
   String _shortDate(DateTime value) =>

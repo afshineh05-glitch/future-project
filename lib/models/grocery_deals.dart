@@ -2,6 +2,8 @@ enum GrocerySearchPass { deal, regularPrice }
 
 enum GroceryPriceKind { sale, regular }
 
+enum GroceryResultTier { verifiedNearby, onlineStore }
+
 enum FoodUnitType { mass, volume, count }
 
 enum DealsResultStatus {
@@ -134,7 +136,8 @@ class GroceryRecommendation {
   final String foodName;
   final double neededQuantity;
   final GrocerySearchResult result;
-  final double distanceKm;
+  final double? distanceKm;
+  final GroceryResultTier tier;
   final double? normalizedPrice;
   final double? discountPercent;
   final double score;
@@ -145,24 +148,35 @@ class GroceryRecommendation {
     required this.neededQuantity,
     required this.result,
     required this.distanceKm,
+    this.tier = GroceryResultTier.verifiedNearby,
     required this.normalizedPrice,
     required this.discountPercent,
     required this.score,
   });
 
   bool get isDeal => result.priceKind == GroceryPriceKind.sale;
+  bool get isVerifiedNearby => tier == GroceryResultTier.verifiedNearby;
 }
 
 class GroceryDealsOutcome {
   final DealsResultStatus status;
-  final List<GroceryRecommendation> recommendations;
   final bool providerFailed;
+  final List<GroceryRecommendation> nearbyRecommendations;
+  final List<GroceryRecommendation> onlineRecommendations;
 
   const GroceryDealsOutcome({
     required this.status,
-    this.recommendations = const [],
     this.providerFailed = false,
+    this.nearbyRecommendations = const [],
+    this.onlineRecommendations = const [],
   });
+
+  List<GroceryRecommendation> get recommendations => allRecommendations;
+
+  List<GroceryRecommendation> get allRecommendations => [
+    ...nearbyRecommendations,
+    ...onlineRecommendations,
+  ];
 }
 
 class DealNotificationCandidate {

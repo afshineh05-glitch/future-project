@@ -62,35 +62,39 @@ class GroceryDealsEngine {
     }
 
     var failed = false;
-    final deals = <GroceryRecommendation>[];
+    final dealsNearby = <GroceryRecommendation>[];
+    final dealsOnline = <GroceryRecommendation>[];
     for (final entry in needs) {
       try {
         final results = await provider.search(
           _request(entry.need, entry.food!, area, GrocerySearchPass.deal),
         );
-        deals.addAll(
-          _validateAndRank(
-            entry.need,
-            entry.food!,
-            area,
-            results,
-            GrocerySearchPass.deal,
-          ),
+        final validated = _validateAndRank(
+          entry.need,
+          entry.food!,
+          area,
+          results,
+          GrocerySearchPass.deal,
         );
+        dealsNearby.addAll(validated.where((item) => item.isVerifiedNearby));
+        dealsOnline.addAll(validated.where((item) => !item.isVerifiedNearby));
       } catch (_) {
         failed = true;
       }
     }
-    if (deals.isNotEmpty) {
-      deals.sort(_compare);
+    if (dealsNearby.isNotEmpty || dealsOnline.isNotEmpty) {
+      dealsNearby.sort(_compare);
+      dealsOnline.sort(_compare);
       return GroceryDealsOutcome(
         status: DealsResultStatus.dealsFound,
-        recommendations: deals,
         providerFailed: failed,
+        nearbyRecommendations: dealsNearby,
+        onlineRecommendations: dealsOnline,
       );
     }
 
-    final regular = <GroceryRecommendation>[];
+    final regularNearby = <GroceryRecommendation>[];
+    final regularOnline = <GroceryRecommendation>[];
     for (final entry in needs) {
       try {
         final results = await provider.search(
@@ -101,26 +105,28 @@ class GroceryDealsEngine {
             GrocerySearchPass.regularPrice,
           ),
         );
-        regular.addAll(
-          _validateAndRank(
-            entry.need,
-            entry.food!,
-            area,
-            results,
-            GrocerySearchPass.regularPrice,
-          ),
+        final validated = _validateAndRank(
+          entry.need,
+          entry.food!,
+          area,
+          results,
+          GrocerySearchPass.regularPrice,
         );
+        regularNearby.addAll(validated.where((item) => item.isVerifiedNearby));
+        regularOnline.addAll(validated.where((item) => !item.isVerifiedNearby));
       } catch (_) {
         failed = true;
       }
     }
-    regular.sort(_compare);
+    regularNearby.sort(_compare);
+    regularOnline.sort(_compare);
     return GroceryDealsOutcome(
-      status: regular.isEmpty
+      status: regularNearby.isEmpty && regularOnline.isEmpty
           ? DealsResultStatus.noReliablePrice
           : DealsResultStatus.regularPricesFound,
-      recommendations: regular,
       providerFailed: failed,
+      nearbyRecommendations: regularNearby,
+      onlineRecommendations: regularOnline,
     );
   }
 
@@ -185,7 +191,7 @@ class GroceryDealsEngine {
             result.storeLocation,
             providerDistanceKm: result.providerDistanceKm,
           );
-          if (distance == null || distance > area.radiusKm || distance < 0) {
+          if (distance != null && (distance > area.radiusKm || distance < 0)) {
             return null;
           }
           if (result.packageQuantity == null ||
@@ -219,7 +225,9 @@ class GroceryDealsEngine {
               result.dealConfidence *
                   (pass == GrocerySearchPass.deal ? 20 : 0) +
               (discount ?? 0).clamp(0, 50) * .3 +
-              (1 - distance / area.radiusKm).clamp(0, 1) * 15 +
+              (distance == null
+                  ? 0
+                  : (1 - distance / area.radiusKm).clamp(0, 1) * 15) +
               packageFit * 20 +
               (normalized == null ? 0 : 5 / (1 + normalized));
           return GroceryRecommendation(
@@ -228,6 +236,9 @@ class GroceryDealsEngine {
             neededQuantity: need.purchaseGrams,
             result: result,
             distanceKm: distance,
+            tier: distance == null
+                ? GroceryResultTier.onlineStore
+                : GroceryResultTier.verifiedNearby,
             normalizedPrice: normalized,
             discountPercent: discount,
             score: score,

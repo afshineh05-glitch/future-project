@@ -81,6 +81,52 @@ void main() {
     expect(outcome.recommendations.single.isDeal, isFalse);
   });
 
+  test(
+    'verified online regular prices survive without store postal evidence',
+    () async {
+      final provider = _Provider(
+        (request) => request.pass == GrocerySearchPass.deal
+            ? const []
+            : [
+                _result(
+                  'online-regular',
+                  pass: request.pass,
+                  postalCode: null,
+                  distance: null,
+                ),
+              ],
+      );
+      final outcome = await _engine(provider).findPrices([_need()]);
+
+      expect(outcome.status, DealsResultStatus.regularPricesFound);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations, hasLength(1));
+      expect(outcome.onlineRecommendations.single.distanceKm, isNull);
+      expect(outcome.onlineRecommendations.single.isVerifiedNearby, isFalse);
+    },
+  );
+
+  test('online sale remains deal-first without claiming nearby', () async {
+    final provider = _Provider(
+      (request) => request.pass == GrocerySearchPass.deal
+          ? [
+              _result(
+                'online-deal',
+                pass: request.pass,
+                postalCode: null,
+                distance: null,
+              ),
+            ]
+          : throw StateError('regular fallback must not run'),
+    );
+    final outcome = await _engine(provider).findPrices([_need()]);
+
+    expect(outcome.status, DealsResultStatus.dealsFound);
+    expect(outcome.onlineRecommendations.single.isDeal, isTrue);
+    expect(outcome.nearbyRecommendations, isEmpty);
+    expect(provider.passes, [GrocerySearchPass.deal]);
+  });
+
   test('price normalization calculates comparable mass and volume prices', () {
     expect(
       PriceNormalizer.perCanonicalUnit(
@@ -342,8 +388,8 @@ FridgeFoodReference _food(String key) =>
 GrocerySearchResult _result(
   String id, {
   required GrocerySearchPass pass,
-  required String postalCode,
-  required double distance,
+  required String? postalCode,
+  required double? distance,
   String productName = 'Fresh Chicken Breast',
   double price = 10,
   double packageQuantity = 1500,

@@ -7,6 +7,7 @@ import {
   parseRetailerPage,
   rejectionReasons,
   acceptUniqueEvidence,
+  blockingReasonsForOnline,
 } from "./logic.ts";
 
 const cors = {
@@ -217,6 +218,7 @@ Deno.serve(async (req) => {
     const results = [];
     const seen = new Set<string>();
     const rejected: Record<string, number> = {};
+    const onlineOnly: Record<string, number> = {};
     let fetchedPages = 0;
     const reject = (reason: string) => {
       rejected[reason] = (rejected[reason] ?? 0) + 1;
@@ -238,25 +240,33 @@ Deno.serve(async (req) => {
       }
       const evidence = parseRetailerPage(html);
       const reasons = rejectionReasons(evidence, pass, terms);
-      if (reasons.length > 0) {
-        for (const reason of reasons) reject(reason);
+      const blockingReasons = blockingReasonsForOnline(reasons);
+      if (blockingReasons.length > 0) {
+        for (const reason of blockingReasons) reject(reason);
         continue;
+      }
+      if (reasons.includes("missing_location")) {
+        onlineOnly.missing_location = (onlineOnly.missing_location ?? 0) + 1;
       }
       if (!acceptUniqueEvidence(seen, evidence)) {
         reject("duplicate");
         continue;
       }
-      const storePostal = evidence.storePostalCode!;
+      const storePostal = evidence.storePostalCode;
       const validUntil = evidence.validUntil;
-      const destination = await geocode(storePostal, mapsKey);
-      if (!destination) {
-        reject("missing_location");
-        continue;
-      }
-      const distanceKm = km(origin, destination);
-      if (distanceKm > radius) {
-        reject("outside_radius");
-        continue;
+      let distanceKm: number | null = null;
+      if (storePostal) {
+        const destination = await geocode(storePostal, mapsKey);
+        if (destination) {
+          const candidateDistance = km(origin, destination);
+          if (candidateDistance <= radius) {
+            distanceKm = candidateDistance;
+          } else {
+            onlineOnly.outside_radius = (onlineOnly.outside_radius ?? 0) + 1;
+          }
+        } else {
+          onlineOnly.missing_location = (onlineOnly.missing_location ?? 0) + 1;
+        }
       }
       results.push({
         id: sourceUrl, productName: evidence.productName, storeName: evidence.storeName ?? retailer.name,
@@ -272,7 +282,7 @@ Deno.serve(async (req) => {
       });
     }
     return Response.json(
-      { results, diagnostics: { fetchedPages, rejected } },
+      { results, diagnostics: { fetchedPages, rejected, onlineOnly } },
       { headers: { ...cors, "Content-Type": "application/json" } },
     );
   } catch (_) {

@@ -50,7 +50,8 @@ void main() {
   test('untrusted discovery results require explicit commerce evidence', () {
     expect(source, contains('parseRetailerPage(html)'));
     expect(source, contains('rejectionReasons(evidence, pass, terms)'));
-    expect(source, contains('distanceKm > radius'));
+    expect(source, contains('candidateDistance <= radius'));
+    expect(source, contains('onlineOnly'));
   });
 
   test('retailer page fetching is bounded and SSRF defensive', () {
@@ -69,7 +70,12 @@ void main() {
   test('page evidence and aggregate rejection diagnostics remain safe', () {
     expect(source, contains('parseRetailerPage(html)'));
     expect(source, contains('rejectionReasons(evidence, pass, terms)'));
-    expect(source, contains('diagnostics: { fetchedPages, rejected }'));
+    expect(
+      source,
+      contains('diagnostics: { fetchedPages, rejected, onlineOnly }'),
+    );
+    expect(source, contains('onlineOnly.missing_location'));
+    expect(source, contains('onlineOnly.outside_radius'));
     expect(source, contains('duplicate'));
     expect(source, isNot(contains('SERPER_API_KEY:')));
     expect(
