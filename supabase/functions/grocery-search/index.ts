@@ -5,6 +5,7 @@ import {
   PAGE_TIMEOUT_MS,
   isPrivateOrReservedIp,
   parseRetailerPage,
+  parseSearchListing,
   rejectionReasons,
   acceptUniqueEvidence,
   blockingReasonsForOnline,
@@ -230,20 +231,36 @@ Deno.serve(async (req) => {
       const sourceUrl = String(item.link ?? "");
       const retailer = retailerForUrl(sourceUrl);
       if (!retailer || !isRetailerUrl(sourceUrl)) continue;
+      const listingEvidence = parseSearchListing(item);
       let html: string;
+      let evidence = listingEvidence;
       try {
         fetchedPages++;
         html = await fetchRetailerPage(sourceUrl);
+        const pageEvidence = parseRetailerPage(html);
+        evidence = {
+          ...pageEvidence,
+          productName: pageEvidence.productName || listingEvidence.productName,
+          price: pageEvidence.price ?? listingEvidence.price,
+          currency: pageEvidence.currency || listingEvidence.currency,
+        };
       } catch (error) {
-        reject(error instanceof Error && error.message === "response_too_large" ? "response_too_large" : "fetch_failed");
-        continue;
+        if (listingEvidence.price == null) {
+          reject(error instanceof Error && error.message === "response_too_large" ? "response_too_large" : "fetch_failed");
+          continue;
+        }
       }
-      const evidence = parseRetailerPage(html);
       const reasons = rejectionReasons(evidence, pass, terms);
       const blockingReasons = blockingReasonsForOnline(reasons);
       if (blockingReasons.length > 0) {
         for (const reason of blockingReasons) reject(reason);
         continue;
+      }
+      if (reasons.includes("missing_package")) {
+        onlineOnly.missing_package = (onlineOnly.missing_package ?? 0) + 1;
+      }
+      if (reasons.includes("missing_availability")) {
+        onlineOnly.missing_availability = (onlineOnly.missing_availability ?? 0) + 1;
       }
       if (reasons.includes("missing_location")) {
         onlineOnly.missing_location = (onlineOnly.missing_location ?? 0) + 1;

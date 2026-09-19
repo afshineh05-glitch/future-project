@@ -169,7 +169,6 @@ class GroceryDealsEngine {
               result.verifiedAt == null ||
               timestamp.difference(result.verifiedAt!.toUtc()).abs() >
                   const Duration(hours: 48) ||
-              !result.availabilityVerified ||
               result.sponsoredOnly ||
               result.matchConfidence < .7 ||
               (pass == GrocerySearchPass.deal &&
@@ -191,15 +190,19 @@ class GroceryDealsEngine {
             result.storeLocation,
             providerDistanceKm: result.providerDistanceKm,
           );
-          if (distance != null && (distance > area.radiusKm || distance < 0)) {
+          if (distance != null && distance < 0) {
             return null;
           }
-          if (result.packageQuantity == null ||
-              result.packageUnitType == null ||
-              !result.packageQuantity!.isFinite ||
-              result.packageQuantity! <= 0) {
-            return null;
-          }
+          final packageConfirmed =
+              result.packageQuantity != null &&
+              result.packageUnitType != null &&
+              result.packageQuantity!.isFinite &&
+              result.packageQuantity! > 0;
+          final nearbyEvidenceComplete =
+              distance != null &&
+              distance <= area.radiusKm &&
+              packageConfirmed &&
+              result.availabilityVerified;
           final normalized = PriceNormalizer.perCanonicalUnit(
             price: result.price,
             packageQuantity: result.packageQuantity,
@@ -236,9 +239,9 @@ class GroceryDealsEngine {
             neededQuantity: need.purchaseGrams,
             result: result,
             distanceKm: distance,
-            tier: distance == null
-                ? GroceryResultTier.onlineStore
-                : GroceryResultTier.verifiedNearby,
+            tier: nearbyEvidenceComplete
+                ? GroceryResultTier.verifiedNearby
+                : GroceryResultTier.onlineStore,
             normalizedPrice: normalized,
             discountPercent: discount,
             score: score,

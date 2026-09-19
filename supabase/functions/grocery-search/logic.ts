@@ -38,6 +38,12 @@ const number = (value: unknown) => {
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 
+function explicitCadPrice(value: string) {
+  const match = value.match(/(?:CAD\s*)?\$?\d+(?:[.,]\d{1,2})?\s*CAD|\$\d+(?:[.,]\d{1,2})?/i);
+  if (!match || !/CAD/i.test(match[0])) return null;
+  return number(match[0]);
+}
+
 function packageInfo(value: string) {
   const match = value.match(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|lb|oz|unit|units|ct|count|eggs?)\b/i);
   if (!match) return { quantity: null, unitType: null } as const;
@@ -166,6 +172,25 @@ export function parseRetailerPage(html: string): PageEvidence {
   };
 }
 
+export function parseSearchListing(item: Record<string, unknown>): PageEvidence {
+  const title = text(item.title);
+  const snippet = text(item.snippet);
+  const price = explicitCadPrice([title, snippet, text(item.price), text(item.currency)].join(" "));
+  return {
+    productName: title,
+    price,
+    regularPrice: null,
+    currency: price == null ? "" : "CAD",
+    packageQuantity: packageInfo(title).quantity,
+    packageUnitType: packageInfo(title).unitType,
+    availabilityVerified: /\b(in stock|available|limited availability)\b/i.test(`${title} ${snippet}`),
+    saleEvidence: /\b(on sale|sale price|special offer|save)\b/i.test(`${title} ${snippet}`),
+    validUntil: null,
+    storeName: null,
+    storePostalCode: null,
+  };
+}
+
 export function rejectionReasons(
   evidence: PageEvidence,
   pass: "deal" | "regularPrice",
@@ -188,7 +213,12 @@ export function rejectionReasons(
 }
 
 export function blockingReasonsForOnline(reasons: string[]) {
-  return reasons.filter((reason) => reason !== "missing_location");
+  const optionalOnlineEvidence = new Set([
+    "missing_package",
+    "missing_availability",
+    "missing_location",
+  ]);
+  return reasons.filter((reason) => !optionalOnlineEvidence.has(reason));
 }
 
 export function evidenceKey(evidence: PageEvidence) {

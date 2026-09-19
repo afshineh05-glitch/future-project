@@ -37,15 +37,16 @@ void main() {
     expect(requirement.purchaseGrams, 1400);
   });
 
-  test('location radius rejects a store outside the shopping area', () async {
+  test('location radius keeps a store outside the nearby tier', () async {
     final provider = _Provider(
       (request) => [
         _result('far', pass: request.pass, postalCode: 'M5V 1A1', distance: 16),
       ],
     );
     final outcome = await _engine(provider).findPrices([_need()]);
-    expect(outcome.status, DealsResultStatus.noReliablePrice);
-    expect(outcome.recommendations, isEmpty);
+    expect(outcome.status, DealsResultStatus.dealsFound);
+    expect(outcome.nearbyRecommendations, isEmpty);
+    expect(outcome.onlineRecommendations.single.isVerifiedNearby, isFalse);
   });
 
   test('deal pass executes first and prevents regular-price pass', () async {
@@ -227,7 +228,7 @@ void main() {
   });
 
   test(
-    'stale, unverified, non-CAD, and sponsored results are rejected',
+    'stale, non-CAD, and sponsored results are rejected while unverified stays online',
     () async {
       final bad = [
         _result(
@@ -263,40 +264,47 @@ void main() {
         (request) => request.pass == GrocerySearchPass.deal ? bad : const [],
       );
       final outcome = await _engine(provider).findPrices([_need()]);
-      expect(outcome.status, DealsResultStatus.noReliablePrice);
+      expect(outcome.status, DealsResultStatus.dealsFound);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations.single.result.id, 'unverified');
     },
   );
 
-  test('results without explicit package evidence are rejected', () async {
-    final provider = _Provider(
-      (request) => [
-        GrocerySearchResult(
-          id: 'missing-package',
-          productName: 'Fresh Chicken Breast',
-          storeName: 'Local Store',
-          storeLocation: const StoreLocation(postalCode: 'M5V 1A1'),
-          price: 10,
-          currency: 'CAD',
-          priceKind: request.pass == GrocerySearchPass.deal
-              ? GroceryPriceKind.sale
-              : GroceryPriceKind.regular,
-          regularPrice: request.pass == GrocerySearchPass.deal ? 15 : null,
-          validUntil: request.pass == GrocerySearchPass.deal
-              ? DateTime.utc(2026, 9, 18)
-              : null,
-          providerDistanceKm: 2,
-          sourceUri: Uri.parse('https://retailer.example/chicken'),
-          sourceName: 'retailer.example',
-          verifiedAt: DateTime.utc(2026, 9, 17),
-          availabilityVerified: true,
-        ),
-      ],
-    );
+  test(
+    'results without explicit package evidence remain online-only',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          GrocerySearchResult(
+            id: 'missing-package',
+            productName: 'Fresh Chicken Breast',
+            storeName: 'Local Store',
+            storeLocation: const StoreLocation(postalCode: 'M5V 1A1'),
+            price: 10,
+            currency: 'CAD',
+            priceKind: request.pass == GrocerySearchPass.deal
+                ? GroceryPriceKind.sale
+                : GroceryPriceKind.regular,
+            regularPrice: request.pass == GrocerySearchPass.deal ? 15 : null,
+            validUntil: request.pass == GrocerySearchPass.deal
+                ? DateTime.utc(2026, 9, 18)
+                : null,
+            providerDistanceKm: 2,
+            sourceUri: Uri.parse('https://retailer.example/chicken'),
+            sourceName: 'retailer.example',
+            verifiedAt: DateTime.utc(2026, 9, 17),
+            availabilityVerified: true,
+          ),
+        ],
+      );
 
-    final outcome = await _engine(provider).findPrices([_need()]);
+      final outcome = await _engine(provider).findPrices([_need()]);
 
-    expect(outcome.status, DealsResultStatus.noReliablePrice);
-  });
+      expect(outcome.status, DealsResultStatus.dealsFound);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations.single.normalizedPrice, isNull);
+    },
+  );
 
   test('duplicate concurrent searches share one provider operation', () async {
     final gate = Completer<List<GrocerySearchResult>>();

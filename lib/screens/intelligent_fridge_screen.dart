@@ -951,8 +951,9 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
 
   Widget _dealResultTile(GroceryRecommendation recommendation) {
     final result = recommendation.result;
-    final package = result.packageQuantity == null
-        ? null
+    final package =
+        result.packageQuantity == null || result.packageUnitType == null
+        ? 'Package size not confirmed'
         : _dealQuantity(result.packageQuantity!, result.packageUnitType!);
     final normalized = recommendation.normalizedPrice == null
         ? null
@@ -967,7 +968,13 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
         : 'Valid until ${_shortDate(result.validUntil!)}';
     final location = recommendation.isVerifiedNearby
         ? 'Location verified · ${result.storeLocation.postalCode ?? 'distance verified'} · ${recommendation.distanceKm!.toStringAsFixed(1)} km away'
-        : 'Location/distance not verified';
+        : 'Location not verified';
+    final availability = result.availabilityVerified
+        ? 'Availability verified'
+        : 'Availability not confirmed';
+    final onlineLabel = recommendation.isDeal
+        ? 'On sale · Online listed price'
+        : 'Online listed price';
     return _Surface(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
@@ -983,14 +990,13 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
         title: Text('${recommendation.foodName} · ${result.storeName}'),
         subtitle: Text(
           [
-            recommendation.isDeal
-                ? recommendation.isVerifiedNearby
-                      ? 'ON SALE'
-                      : 'SALE ONLINE PRICE'
-                : recommendation.isVerifiedNearby
-                ? 'VERIFIED NEARBY REGULAR PRICE'
-                : 'Regular online price',
-            ?package,
+            recommendation.isVerifiedNearby
+                ? recommendation.isDeal
+                      ? 'On sale'
+                      : 'Verified nearby regular price'
+                : onlineLabel,
+            package,
+            availability,
             ?normalized,
             location,
             ?validity,

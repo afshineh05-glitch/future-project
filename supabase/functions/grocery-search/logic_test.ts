@@ -5,6 +5,7 @@ import {
   isAllowedRetailerUrl,
   isPrivateOrReservedIp,
   parseRetailerPage,
+  parseSearchListing,
   rejectionReasons,
   acceptUniqueEvidence,
   blockingReasonsForOnline,
@@ -18,8 +19,11 @@ const saleFixture = `<!doctype html><script type="application/ld+json">
 {"@graph":[{"@type":"Product","name":"Chicken Breast 1 kg","offers":{"price":9.99,"priceCurrency":"CAD","priceValidUntil":"2099-12-31","availability":"InStock","seller":{"name":"Metro","address":{"postalCode":"H2X 1Y4"}},"listPrice":14.99}}]}
 </script>`;
 const oliveOilOnlineFixture = `<!doctype html><script type="application/ld+json">
-{"@type":"Product","name":"Olive Oil Extra Virgin 1 L","offers":{"@type":"Offer","price":"15.49","priceCurrency":"CAD","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"Metro"}}}
+{"@type":"Product","name":"Olive Oil Extra Virgin","offers":{"@type":"Offer","price":"15.49","priceCurrency":"CAD","seller":{"@type":"Organization","name":"Metro"}}}
 </script>`;
+const chickpeasSerperListing = {
+  link: "https://walmart.ca/en/ip/chickpeas/123",
+};
 
 Deno.test("valid regular Product/Offer evidence is accepted", () => {
   const evidence = parseRetailerPage(regularFixture);
@@ -59,11 +63,23 @@ Deno.test("missing location cannot become a nearby result", () => {
 Deno.test("Olive Oil without store postal evidence survives as an online price", () => {
   const evidence = parseRetailerPage(oliveOilOnlineFixture);
   const reasons = rejectionReasons(evidence, "regularPrice", ["olive oil"]);
-  assertEquals(reasons, ["missing_location"]);
+  assertEquals(reasons, ["missing_package", "missing_availability", "missing_location"]);
   assertEquals(blockingReasonsForOnline(reasons), []);
   assertEquals(evidence.price, 15.49);
-  assertEquals(evidence.packageQuantity, 1000);
-  assertEquals(evidence.packageUnitType, "volume");
+  assertEquals(evidence.packageQuantity, null);
+  assertEquals(evidence.packageUnitType, null);
+});
+
+Deno.test("explicit CAD Chickpeas Serper listing survives without optional evidence", () => {
+  const evidence = parseSearchListing({
+    title: "Chickpeas",
+    snippet: "Walmart chickpeas $2.49 CAD",
+  });
+  const reasons = rejectionReasons(evidence, "regularPrice", ["chickpeas"]);
+  assertEquals(reasons, ["missing_package", "missing_availability", "missing_location"]);
+  assertEquals(blockingReasonsForOnline(reasons), []);
+  assert(isAllowedRetailerUrl(chickpeasSerperListing.link, domains));
+  assertEquals(evidence.price, 2.49);
 });
 
 Deno.test("redirects must remain on approved HTTPS retailer domains", () => {

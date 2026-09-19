@@ -75,6 +75,8 @@ void main() {
       contains('diagnostics: { fetchedPages, rejected, onlineOnly }'),
     );
     expect(source, contains('onlineOnly.missing_location'));
+    expect(source, contains('onlineOnly.missing_package'));
+    expect(source, contains('onlineOnly.missing_availability'));
     expect(source, contains('onlineOnly.outside_radius'));
     expect(source, contains('duplicate'));
     expect(source, isNot(contains('SERPER_API_KEY:')));
