@@ -15,9 +15,11 @@ import 'package:future_project/screens/ingredient_image_curator_screen.dart';
 import 'package:future_project/services/intelligent_fridge_service.dart';
 import 'package:future_project/services/deals_location_service.dart';
 import 'package:future_project/services/grocery_deals_engine.dart';
+import 'package:future_project/services/grocery_item_deals_controller.dart';
 import 'package:future_project/services/serper_grocery_search_provider.dart';
 import 'package:future_project/services/ingredient_image_service.dart';
 import 'package:future_project/theme/app_theme.dart';
+import 'package:future_project/widgets/grocery_list_row.dart';
 
 class IntelligentFridgeScreen extends StatefulWidget {
   final PerformanceFuel fuel;
@@ -44,13 +46,11 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
   late final IngredientImageService _imageService;
   late final GroceryDealsEngine _dealsEngine;
   late final SupabaseDealsLocationService _locationService;
-  final DealsSearchCoordinator _dealsCoordinator = DealsSearchCoordinator();
+  late final GroceryItemDealsController _itemDealsController;
   StreamSubscription<AuthState>? _authSubscription;
   final Map<String, Future<FoodVisual>> _ingredientImages = {};
   IntelligentFridgeState? _state;
-  GroceryDealsOutcome? _dealsOutcome;
   UserShoppingArea? _shoppingArea;
-  int _loadGeneration = 0;
   String _search = '';
   String _selectedCategory = 'All';
   Set<String> _selectedKeys = {};
@@ -95,16 +95,19 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
       locationService: _locationService,
       provider: SerperGrocerySearchProvider(),
     );
+    _itemDealsController = GroceryItemDealsController(
+      locationService: _locationService,
+      engine: _dealsEngine,
+      expectedUserId: widget.profile.userId,
+    )..addListener(_onItemDealsChanged);
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       event,
     ) {
       if (event.session?.user.id == widget.profile.userId) return;
-      _loadGeneration++;
-      _dealsCoordinator.clear();
+      _itemDealsController.invalidate();
       if (mounted) {
         setState(() {
           _shoppingArea = null;
-          _dealsOutcome = null;
         });
       }
     });
@@ -115,7 +118,18 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _itemDealsController
+      ..removeListener(_onItemDealsChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onItemDealsChanged() {
+    if (!mounted) return;
+    setState(() {
+      final state = _itemDealsController.state;
+      _shoppingArea = state.shoppingArea ?? _shoppingArea;
+    });
   }
 
   void _loadIngredientImages() {
@@ -171,45 +185,20 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
               .map((item) => item.ingredientKey)
               .toSet();
         });
-        await _loadDeals(value.groceryList);
+        try {
+          _shoppingArea = await _locationService.currentShoppingArea();
+        } catch (_) {
+          // A missing/unavailable area is rendered in the deals section.
+        }
+        if (mounted) setState(() {});
       }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
   }
 
-  Future<void> _loadDeals(List<WeeklyFoodRequirement> groceryList) async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null || userId != widget.profile.userId) return;
-    final generation = ++_loadGeneration;
-    try {
-      final area = await _locationService.currentShoppingArea();
-      final outcome = await _dealsCoordinator.search(
-        userId: userId,
-        engine: _dealsEngine,
-        groceryList: groceryList,
-      );
-      if (mounted &&
-          generation == _loadGeneration &&
-          Supabase.instance.client.auth.currentUser?.id == userId) {
-        setState(() {
-          _shoppingArea = area;
-          _dealsOutcome = outcome;
-        });
-      }
-    } catch (_) {
-      if (mounted &&
-          generation == _loadGeneration &&
-          Supabase.instance.client.auth.currentUser?.id == userId) {
-        setState(
-          () => _dealsOutcome = const GroceryDealsOutcome(
-            status: DealsResultStatus.noReliablePrice,
-            providerFailed: true,
-          ),
-        );
-      }
-    }
-  }
+  Future<void> _selectGroceryItem(WeeklyFoodRequirement item) =>
+      _itemDealsController.select(item);
 
   Future<void> _editShoppingArea() async {
     final controller = TextEditingController(
@@ -297,8 +286,13 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
     );
     controller.dispose();
     if (saved == true && mounted && _state != null) {
-      setState(() => _dealsOutcome = null);
-      await _loadDeals(_state!.groceryList);
+      _itemDealsController.invalidate();
+      try {
+        _shoppingArea = await _locationService.currentShoppingArea();
+      } catch (_) {
+        _shoppingArea = null;
+      }
+      if (mounted) setState(() {});
     }
   }
 
@@ -656,7 +650,14 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(child: _section('Nearby Grocery Prices')),
+                      Expanded(
+                        child: _section(
+                          _itemDealsController.state.selectedItem == null
+                              ? 'Nearby Grocery Prices'
+                              : 'Nearby Grocery Prices · '
+                                    '${_itemDealsController.state.selectedItem!.food.name}',
+                        ),
+                      ),
                       TextButton.icon(
                         onPressed: _editShoppingArea,
                         icon: const Icon(Icons.location_on_outlined),
@@ -869,27 +870,62 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
   );
 
   Widget _groceryTile(WeeklyFoodRequirement item) => _Surface(
-    child: ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.shopping_basket_outlined),
-      title: Text(item.food.name),
-      trailing: Text('Need about ${_amount(item.purchaseGrams)}'),
+    child: GroceryListRow(
+      title: item.food.name,
+      quantityLabel: 'Need about ${_amount(item.purchaseGrams)}',
+      selected:
+          _itemDealsController.state.selectedItem?.food.key == item.food.key,
+      loading:
+          _itemDealsController.state.isLoading &&
+          _itemDealsController.state.selectedItem?.food.key == item.food.key,
+      onTap: () => _selectGroceryItem(item),
     ),
   );
 
   Widget _dealsSection() {
-    final outcome = _dealsOutcome;
-    if (outcome == null) {
-      return const _Surface(child: Center(child: CircularProgressIndicator()));
+    final dealsState = _itemDealsController.state;
+    if (dealsState.status == GroceryItemDealsViewStatus.idle) {
+      return const _EmptyCard('Select a grocery item to search nearby prices.');
     }
+    if (dealsState.status == GroceryItemDealsViewStatus.loading) {
+      return const _Surface(
+        child: ListTile(
+          leading: SizedBox.square(
+            dimension: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          title: Text('Searching verified nearby prices...'),
+        ),
+      );
+    }
+    if (dealsState.status == GroceryItemDealsViewStatus.error) {
+      return _EmptyCard(
+        'Nearby prices could not be loaded. Try again.',
+        action: TextButton(
+          onPressed: _itemDealsController.retry,
+          child: const Text('Try again'),
+        ),
+      );
+    }
+    final outcome = dealsState.outcome!;
     final message = switch (outcome.status) {
       DealsResultStatus.shoppingAreaRequired =>
         'Set your Canadian postal code and radius to find verified nearby prices.',
       DealsResultStatus.noReliablePrice =>
-        'No verified nearby deal is available. Unconfirmed prices and locations are hidden.',
+        'We could not verify a nearby price for this item. Online listings may exist, but their location or product details were not verifiable.',
       _ => null,
     };
-    if (message != null) return _EmptyCard(message);
+    if (message != null) {
+      return _EmptyCard(
+        message,
+        action: outcome.status == DealsResultStatus.shoppingAreaRequired
+            ? TextButton(
+                onPressed: _editShoppingArea,
+                child: const Text('Set area'),
+              )
+            : null,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -933,9 +969,10 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
                       : 'BEST NEARBY REGULAR PRICE',
                   ?package,
                   ?normalized,
+                  'Location verified · ${result.storeLocation.postalCode ?? 'distance verified'}',
                   '${recommendation.distanceKm.toStringAsFixed(1)} km away',
                   ?validity,
-                  'Source: ${result.sourceName}',
+                  'Source: ${result.sourceUri}',
                 ].join(' · '),
               ),
               trailing: Text(
@@ -1176,11 +1213,19 @@ class _IngredientImagePlaceholder extends StatelessWidget {
 
 class _EmptyCard extends StatelessWidget {
   final String message;
-  const _EmptyCard(this.message);
+  final Widget? action;
+
+  const _EmptyCard(this.message, {this.action});
 
   @override
   Widget build(BuildContext context) => _Surface(
-    child: Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
+        ?action,
+      ],
+    ),
   );
 }
 

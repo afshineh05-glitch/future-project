@@ -48,12 +48,37 @@ void main() {
   });
 
   test('untrusted discovery results require explicit commerce evidence', () {
-    expect(source, contains('explicitPrice(evidence)'));
-    expect(source, contains('explicitRegularPrice(evidence)'));
-    expect(source, contains('explicitPackage(evidence)'));
-    expect(source, contains('explicitPostal(evidence)'));
-    expect(source, contains('explicitValidUntil(evidence)'));
-    expect(source, contains('availabilityVerified'));
+    expect(source, contains('parseRetailerPage(html)'));
+    expect(source, contains('rejectionReasons(evidence, pass, terms)'));
     expect(source, contains('distanceKm > radius'));
+  });
+
+  test('retailer page fetching is bounded and SSRF defensive', () {
+    expect(source, contains('PAGE_MAX_FETCHES'));
+    expect(source, contains('PAGE_MAX_BYTES'));
+    expect(source, contains('PAGE_TIMEOUT_MS'));
+    expect(source, contains('redirect: "manual"'));
+    expect(source, contains('Deno.resolveDns'));
+    expect(source, contains('isPrivateOrReservedIp'));
+    expect(source, contains('!url.port'));
+    expect(source, contains('unsupported_content_type'));
+    expect(source, contains('response_too_large'));
+    expect(source, contains('unsafe_redirect'));
+  });
+
+  test('page evidence and aggregate rejection diagnostics remain safe', () {
+    expect(source, contains('parseRetailerPage(html)'));
+    expect(source, contains('rejectionReasons(evidence, pass, terms)'));
+    expect(source, contains('diagnostics: { fetchedPages, rejected }'));
+    expect(source, contains('duplicate'));
+    expect(source, isNot(contains('SERPER_API_KEY:')));
+    expect(
+      File('supabase/functions/grocery-search/logic.ts').existsSync(),
+      isTrue,
+    );
+    expect(
+      File('supabase/functions/grocery-search/logic_test.ts').existsSync(),
+      isTrue,
+    );
   });
 }

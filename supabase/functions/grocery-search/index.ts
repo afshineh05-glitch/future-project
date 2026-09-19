@@ -1,4 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  PAGE_MAX_BYTES,
+  PAGE_MAX_FETCHES,
+  PAGE_TIMEOUT_MS,
+  isPrivateOrReservedIp,
+  parseRetailerPage,
+  rejectionReasons,
+  acceptUniqueEvidence,
+} from "./logic.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -38,14 +47,11 @@ const isRetailerUrl = (value: string) => {
     const host = url.hostname.toLowerCase();
     return url.protocol === "https:" &&
       !url.username && !url.password &&
+      !url.port &&
       retailerDomains.some((domain) => host === domain || host.endsWith(`.${domain}`));
   } catch (_) {
     return false;
   }
-};
-const number = (v: unknown) => {
-  const n = Number(String(v ?? "").replace(/[^0-9.]/g, ""));
-  return Number.isFinite(n) && n > 0 ? n : null;
 };
 const retailerForUrl = (value: string) => {
   try {
@@ -59,45 +65,6 @@ const retailerForUrl = (value: string) => {
   }
 };
 
-const textOf = (item: Record<string, unknown>) =>
-  [item.title, item.snippet, item.date].filter((value) => typeof value === "string").join(" ");
-
-function explicitPrice(text: string) {
-  const cad = text.match(/(?:CAD\s*\$?\s*(\d{1,4}(?:[.,]\d{2})?)|\$\s*(\d{1,4}(?:[.,]\d{2})?)\s*CAD)\b/i);
-  return cad ? number((cad[1] ?? cad[2]).replace(",", ".")) : null;
-}
-
-function explicitRegularPrice(text: string) {
-  const match = text.match(/(?:regular(?:ly)?|was|reg\.?|list price)\s*(?:price)?\s*[:\-]?\s*(?:CAD\s*)?\$\s*(\d{1,4}(?:[.,]\d{2})?)/i);
-  return match ? number(match[1].replace(",", ".")) : null;
-}
-
-function explicitPackage(text: string) {
-  const match = text.match(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)\b/i);
-  if (!match) return null;
-  const raw = Number(match[1].replace(",", "."));
-  const unit = match[2].toLowerCase();
-  if (!Number.isFinite(raw) || raw <= 0) return null;
-  return {
-    quantity: unit === "kg" || unit === "l" ? raw * 1000 : raw,
-    unitType: unit === "l" || unit === "ml" ? "volume" : "mass",
-  };
-}
-
-function explicitPostal(text: string) {
-  const match = text.toUpperCase().match(/\b[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ][ -]?\d[ABCEGHJKLMNPRSTVWXYZ]\d\b/);
-  if (!match) return null;
-  const compact = match[0].replace(/[ -]/g, "");
-  return `${compact.slice(0, 3)} ${compact.slice(3)}`;
-}
-
-function explicitValidUntil(text: string) {
-  const match = text.match(/(?:valid|ends?|until|through)\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/);
-  if (!match) return null;
-  const date = new Date(match[1]);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
 async function geocode(value: string, key: string) {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", `${value}, Canada`);
@@ -106,6 +73,85 @@ async function geocode(value: string, key: string) {
   const data = await (await fetch(url)).json();
   const point = data?.results?.[0]?.geometry?.location;
   return typeof point?.lat === "number" && typeof point?.lng === "number" ? point : null;
+}
+
+async function safeHost(host: string) {
+  if (isPrivateOrReservedIp(host)) return false;
+  try {
+    const addresses = await Promise.all([
+      Deno.resolveDns(host, "A"),
+      Deno.resolveDns(host, "AAAA").catch(() => [] as string[]),
+    ]);
+    return addresses.flat().every((address) => !isPrivateOrReservedIp(address));
+  } catch (_) {
+    return false;
+  }
+}
+
+async function fetchRetailerPage(sourceUrl: string) {
+  let current = new URL(sourceUrl);
+  for (let redirect = 0; redirect <= 3; redirect++) {
+    if (!isRetailerUrl(current.toString()) || !(await safeHost(current.hostname))) {
+      throw new Error("unsafe_url");
+    }
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), PAGE_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(current, { signal: abort.signal, redirect: "manual" });
+    } catch (error) {
+      clearTimeout(timeout);
+      throw error;
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      clearTimeout(timeout);
+      if (!location || redirect === 3) throw new Error("unsafe_redirect");
+      current = new URL(location, current);
+      continue;
+    }
+    if (!response.ok) {
+      clearTimeout(timeout);
+      throw new Error("fetch_failed");
+    }
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml") &&
+      !contentType.includes("application/ld+json") && !contentType.includes("application/json")) {
+      clearTimeout(timeout);
+      throw new Error("unsupported_content_type");
+    }
+    const declaredLength = Number(response.headers.get("content-length") ?? "0");
+    if (declaredLength > PAGE_MAX_BYTES) {
+      clearTimeout(timeout);
+      throw new Error("response_too_large");
+    }
+    if (!response.body) {
+      clearTimeout(timeout);
+      throw new Error("fetch_failed");
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > PAGE_MAX_BYTES) {
+        clearTimeout(timeout);
+        throw new Error("response_too_large");
+      }
+      chunks.push(part.value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    clearTimeout(timeout);
+    return new TextDecoder().decode(bytes);
+  }
+  throw new Error("unsafe_redirect");
 }
 
 function km(a: {lat:number; lng:number}, b: {lat:number; lng:number}) {
@@ -169,43 +215,66 @@ Deno.serve(async (req) => {
     const origin = await geocode(postal, mapsKey);
     if (!origin) return Response.json({ results: [] }, { headers: cors });
     const results = [];
+    const seen = new Set<string>();
+    const rejected: Record<string, number> = {};
+    let fetchedPages = 0;
+    const reject = (reason: string) => {
+      rejected[reason] = (rejected[reason] ?? 0) + 1;
+    };
     for (const raw of payload.organic ?? []) {
+      if (fetchedPages >= PAGE_MAX_FETCHES) break;
       if (!raw || typeof raw !== "object") continue;
       const item = raw as Record<string, unknown>;
       const sourceUrl = String(item.link ?? "");
       const retailer = retailerForUrl(sourceUrl);
       if (!retailer || !isRetailerUrl(sourceUrl)) continue;
-      const evidence = textOf(item);
-      const productName = String(item.title ?? "").trim();
-      const lower = productName.toLowerCase();
-      const price = explicitPrice(evidence);
-      const regularPrice = explicitRegularPrice(evidence);
-      const storePostal = explicitPostal(evidence);
-      const packageInfo = explicitPackage(evidence);
-      const validUntil = explicitValidUntil(evidence);
-      const availabilityVerified = /\b(in[ -]?stock|available (?:now|today|at))\b/i.test(evidence);
-      if (!terms.some((term) => lower.includes(term)) || !price || !storePostal ||
-        !packageInfo || !availabilityVerified || !/\b(CAD|Canada|Canadian|QC|Quebec|Montreal)\b/i.test(evidence)) continue;
-      if (pass === "deal" && (!/\b(sale|deal|flyer|save)\b/i.test(evidence) ||
-        !regularPrice || regularPrice <= price || !validUntil)) continue;
+      let html: string;
+      try {
+        fetchedPages++;
+        html = await fetchRetailerPage(sourceUrl);
+      } catch (error) {
+        reject(error instanceof Error && error.message === "response_too_large" ? "response_too_large" : "fetch_failed");
+        continue;
+      }
+      const evidence = parseRetailerPage(html);
+      const reasons = rejectionReasons(evidence, pass, terms);
+      if (reasons.length > 0) {
+        for (const reason of reasons) reject(reason);
+        continue;
+      }
+      if (!acceptUniqueEvidence(seen, evidence)) {
+        reject("duplicate");
+        continue;
+      }
+      const storePostal = evidence.storePostalCode!;
+      const validUntil = evidence.validUntil;
       const destination = await geocode(storePostal, mapsKey);
-      if (!destination) continue;
+      if (!destination) {
+        reject("missing_location");
+        continue;
+      }
       const distanceKm = km(origin, destination);
-      if (distanceKm > radius) continue;
+      if (distanceKm > radius) {
+        reject("outside_radius");
+        continue;
+      }
       results.push({
-        id: sourceUrl, productName, storeName: retailer.name,
-        storePostalCode: storePostal, distanceKm, price, regularPrice,
+        id: sourceUrl, productName: evidence.productName, storeName: evidence.storeName ?? retailer.name,
+        storePostalCode: storePostal, distanceKm, price: evidence.price!, regularPrice: evidence.regularPrice,
         currency: "CAD", priceKind: pass === "deal" ? "sale" : "regular",
-        packageQuantity: packageInfo.quantity, packageUnitType: packageInfo.unitType,
+        packageQuantity: evidence.packageQuantity, packageUnitType: evidence.packageUnitType,
         validUntil: validUntil?.toISOString() ?? null,
         matchConfidence: 0.8, dealConfidence: pass === "deal" ? 0.8 : 1,
         sourceUrl, sourceName: new URL(sourceUrl).hostname.toLowerCase(),
         verifiedAt: new Date().toISOString(),
-        availabilityVerified,
+        availabilityVerified: evidence.availabilityVerified,
         sponsoredOnly: false,
       });
     }
-    return Response.json({ results }, { headers: { ...cors, "Content-Type": "application/json" } });
+    return Response.json(
+      { results, diagnostics: { fetchedPages, rejected } },
+      { headers: { ...cors, "Content-Type": "application/json" } },
+    );
   } catch (_) {
     return Response.json({ results: [] }, { status: 200, headers: cors });
   }
