@@ -10,6 +10,7 @@ export type PageEvidence = {
   validUntil: Date | null;
   storeName: string | null;
   storePostalCode: string | null;
+  locationEvidenceVerified: boolean;
   sourceUrl?: string;
   productId?: string | null;
 };
@@ -197,13 +198,21 @@ export function parseRetailerPage(html: string): PageEvidence {
   const locationAddress = location?.address as
     | Record<string, unknown>
     | undefined;
-  const addressText = [
-    locationAddress?.postalCode,
-    sellerAddress?.postalCode,
-    locationAddress?.streetAddress,
-    sellerAddress?.streetAddress,
-    meta["business:contact_data:postal_code"],
-  ].filter(Boolean).join(" ");
+  const sellerType = seller?.["@type"];
+  const sellerIsStore = sellerType === "LocalBusiness" ||
+    sellerType === "GroceryStore" || sellerType === "Store" ||
+    (Array.isArray(sellerType) &&
+      sellerType.some((value) =>
+        ["LocalBusiness", "GroceryStore", "Store"].includes(String(value))
+      ));
+  const locationEvidenceVerified = Boolean(location || sellerIsStore);
+  const addressText = location
+    ? [locationAddress?.postalCode, locationAddress?.streetAddress]
+      .filter(Boolean).join(" ")
+    : sellerIsStore
+    ? [sellerAddress?.postalCode, sellerAddress?.streetAddress]
+      .filter(Boolean).join(" ")
+    : "";
   const storePostalCode = postal(addressText);
   const storeName = text(location?.name) || text(seller?.name) ||
     text(meta["og:site_name"]) || null;
@@ -224,6 +233,7 @@ export function parseRetailerPage(html: string): PageEvidence {
     validUntil,
     storeName,
     storePostalCode,
+    locationEvidenceVerified,
   };
 }
 
@@ -251,6 +261,7 @@ export function parseSearchListing(
     validUntil: null,
     storeName: null,
     storePostalCode: null,
+    locationEvidenceVerified: false,
   };
 }
 
@@ -278,6 +289,7 @@ export function parseShoppingListing(
     validUntil: null,
     storeName: text(item.source) || null,
     storePostalCode: postal(delivery),
+    locationEvidenceVerified: false,
     sourceUrl: text(item.link),
     productId: text(item.productId) || null,
   };
@@ -312,19 +324,91 @@ const productTokens = (value: string) => [
   ),
 ];
 
+export type IngredientCategory =
+  | "raw_protein"
+  | "grain"
+  | "legume"
+  | "vegetable"
+  | "fruit"
+  | "oil_fat"
+  | "dairy"
+  | "other_basic";
+
+const categoryTerms: Record<IngredientCategory, Set<string>> = {
+  raw_protein: new Set([
+    "chicken breast",
+    "chicken thigh",
+    "turkey breast",
+    "lean beef",
+    "ground beef",
+    "steak",
+  ]),
+  grain: new Set(["white rice", "brown rice", "basmati rice", "oats", "pasta", "bread", "tortillas"]),
+  legume: new Set(["lentils", "chickpeas", "black beans", "kidney beans"]),
+  vegetable: new Set(["potatoes", "sweet potatoes"]),
+  fruit: new Set(),
+  oil_fat: new Set(["olive oil", "peanut butter"]),
+  dairy: new Set(["milk", "skim milk", "cheese", "greek yogurt", "cottage cheese"]),
+  other_basic: new Set(),
+};
+
+const normalizeProductText = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function classifyIngredient(canonicalTerms: string[]): IngredientCategory {
+  const canonical = normalizeProductText(canonicalTerms[0] ?? "");
+  for (const category of Object.keys(categoryTerms) as IngredientCategory[]) {
+    if (categoryTerms[category].has(canonical)) return category;
+  }
+  return "other_basic";
+}
+
+export function ingredientMatch(
+  productText: string,
+  canonicalTerms: string[],
+) {
+  const normalized = normalizeProductText(productText);
+  const terms = canonicalTerms.map(normalizeProductText).filter(Boolean);
+  const category = classifyIngredient(canonicalTerms);
+  if (!terms.some((term) => normalized.includes(term))) {
+    return { matches: false, category, quality: 0, reason: "missing_product" } as const;
+  }
+  if (category === "raw_protein") {
+    const prepared = /\b(deli|cold cuts?|luncheon|sandwich(?: meat)?|ready to eat|prepared (?:meal|food)|meal kit|fully cooked|cooked|smoked|roasted|breaded|nuggets?|charcuterie|bbq|barbecue|skewers?)\b/.test(normalized);
+    const slicedOrStrip = /\b(slices?|strips?)\b/.test(normalized);
+    const explicitRaw = /\b(raw|uncooked|fresh|frozen)\b/.test(normalized);
+    const explicitUncookedRoast = /\b(raw|uncooked)\b/.test(normalized);
+    const ambiguousRoast = /\broast\b/.test(normalized) && !explicitUncookedRoast;
+    if (prepared || slicedOrStrip || ambiguousRoast) {
+      return {
+        matches: false,
+        category,
+        quality: 0,
+        reason: "processed_prepared_product",
+      } as const;
+    }
+    const exact = terms.some((term) =>
+      normalized === term ||
+      new RegExp(`^${term.replace(/ /g, "\\s+")}\\s+\\d+(?:[.,]\\d+)?\\s*(?:g|kg|lb|oz)?$`).test(normalized)
+    );
+    return {
+      matches: true,
+      category,
+      quality: exact ? 3 : explicitRaw ? 2 : 1,
+      reason: null,
+    } as const;
+  }
+  return { matches: true, category, quality: 1, reason: null } as const;
+}
+
 export function resolvedTitleMatchesShopping(
   shoppingTitle: string,
   resolvedText: string,
   canonicalTerms: string[],
 ) {
   const normalizedResolved = resolvedText.toLowerCase();
-  if (
-    !canonicalTerms.some((term) =>
-      normalizedResolved.includes(term.toLowerCase())
-    )
-  ) {
-    return false;
-  }
+  if (!ingredientMatch(shoppingTitle, canonicalTerms).matches) return false;
+  if (!ingredientMatch(resolvedText, canonicalTerms).matches) return false;
   const tokens = productTokens(shoppingTitle);
   if (tokens.length === 0) return false;
   const matches =
@@ -365,10 +449,8 @@ export function rejectionReasons(
   now = new Date(),
 ) {
   const reasons: string[] = [];
-  const name = evidence.productName.toLowerCase();
-  if (!canonicalTerms.some((term) => name.includes(term))) {
-    reasons.push("missing_product");
-  }
+  const productMatch = ingredientMatch(evidence.productName, canonicalTerms);
+  if (!productMatch.matches) reasons.push(productMatch.reason);
   if (!evidence.price || evidence.currency !== "CAD") {
     reasons.push("missing_price");
   }
@@ -377,13 +459,12 @@ export function rejectionReasons(
     reasons.push("missing_package");
   }
   if (!evidence.availabilityVerified) reasons.push("missing_availability");
-  if (!evidence.storePostalCode) reasons.push("missing_location");
+  if (!evidence.storePostalCode || !evidence.locationEvidenceVerified) {
+    reasons.push("missing_location");
+  }
   if (pass === "deal") {
     if (!evidence.saleEvidence) reasons.push("missing_sale_evidence");
-    if (
-      !evidence.regularPrice || evidence.regularPrice <= (evidence.price ?? 0)
-    ) reasons.push("missing_regular_price");
-    if (!evidence.validUntil || evidence.validUntil <= now) {
+    if (evidence.validUntil && evidence.validUntil <= now) {
       reasons.push("stale_deal");
     }
   }

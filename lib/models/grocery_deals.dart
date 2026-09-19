@@ -106,6 +106,11 @@ class GrocerySearchResult {
   final DateTime? verifiedAt;
   final bool availabilityVerified;
   final bool sponsoredOnly;
+  final bool dealVerified;
+  final bool locationVerified;
+  final bool onlineOnly;
+  final bool saleEvidence;
+  final double? radiusKm;
 
   const GrocerySearchResult({
     required this.id,
@@ -128,7 +133,15 @@ class GrocerySearchResult {
     this.verifiedAt,
     this.availabilityVerified = false,
     this.sponsoredOnly = false,
+    this.dealVerified = false,
+    this.locationVerified = false,
+    this.onlineOnly = true,
+    this.saleEvidence = false,
+    this.radiusKm,
   });
+
+  double get currentPrice => price;
+  double? get salePrice => priceKind == GroceryPriceKind.sale ? price : null;
 }
 
 class GroceryRecommendation {

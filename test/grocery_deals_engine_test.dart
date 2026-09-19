@@ -44,7 +44,7 @@ void main() {
       ],
     );
     final outcome = await _engine(provider).findPrices([_need()]);
-    expect(outcome.status, DealsResultStatus.dealsFound);
+    expect(outcome.status, DealsResultStatus.regularPricesFound);
     expect(outcome.nearbyRecommendations, isEmpty);
     expect(outcome.onlineRecommendations.single.isVerifiedNearby, isFalse);
   });
@@ -107,7 +107,7 @@ void main() {
     },
   );
 
-  test('online sale remains deal-first without claiming nearby', () async {
+  test('online-only sale falls back to a regular price', () async {
     final provider = _Provider(
       (request) => request.pass == GrocerySearchPass.deal
           ? [
@@ -118,14 +118,24 @@ void main() {
                 distance: null,
               ),
             ]
-          : throw StateError('regular fallback must not run'),
+          : [
+              _result(
+                'regular-fallback',
+                pass: request.pass,
+                postalCode: null,
+                distance: null,
+              ),
+            ],
     );
     final outcome = await _engine(provider).findPrices([_need()]);
 
-    expect(outcome.status, DealsResultStatus.dealsFound);
-    expect(outcome.onlineRecommendations.single.isDeal, isTrue);
+    expect(outcome.status, DealsResultStatus.regularPricesFound);
+    expect(outcome.onlineRecommendations.single.isDeal, isFalse);
     expect(outcome.nearbyRecommendations, isEmpty);
-    expect(provider.passes, [GrocerySearchPass.deal]);
+    expect(provider.passes, [
+      GrocerySearchPass.deal,
+      GrocerySearchPass.regularPrice,
+    ]);
   });
 
   test('price normalization calculates comparable mass and volume prices', () {
@@ -265,8 +275,7 @@ void main() {
       );
       final outcome = await _engine(provider).findPrices([_need()]);
       expect(outcome.status, DealsResultStatus.dealsFound);
-      expect(outcome.nearbyRecommendations, isEmpty);
-      expect(outcome.onlineRecommendations.single.result.id, 'unverified');
+      expect(outcome.nearbyRecommendations.single.result.id, 'unverified');
     },
   );
 
@@ -294,6 +303,11 @@ void main() {
             sourceName: 'retailer.example',
             verifiedAt: DateTime.utc(2026, 9, 17),
             availabilityVerified: true,
+            dealVerified: request.pass == GrocerySearchPass.deal,
+            locationVerified: true,
+            onlineOnly: false,
+            saleEvidence: request.pass == GrocerySearchPass.deal,
+            radiusKm: 15,
           ),
         ],
       );
@@ -301,8 +315,7 @@ void main() {
       final outcome = await _engine(provider).findPrices([_need()]);
 
       expect(outcome.status, DealsResultStatus.dealsFound);
-      expect(outcome.nearbyRecommendations, isEmpty);
-      expect(outcome.onlineRecommendations.single.normalizedPrice, isNull);
+      expect(outcome.nearbyRecommendations.single.normalizedPrice, isNull);
     },
   );
 
@@ -373,12 +386,186 @@ void main() {
     expect(outcome.status, DealsResultStatus.regularPricesFound);
     expect(provider.passes.length, 2);
   });
+
+  test(
+    'Montreal user with verified Montreal deal accepts Nearby Deal',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            'montreal-deal',
+            pass: request.pass,
+            postalCode: 'H2X 1Y4',
+            distance: 2,
+          ),
+        ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.nearbyRecommendations.single.result.id, 'montreal-deal');
+      expect(outcome.nearbyRecommendations.single.result.dealVerified, isTrue);
+      expect(
+        outcome.nearbyRecommendations.single.result.locationVerified,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'Montreal user with Toronto deal rejects Nearby Deal and uses regular price',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            request.pass == GrocerySearchPass.deal ? 'toronto-deal' : 'regular',
+            pass: request.pass,
+            postalCode: request.pass == GrocerySearchPass.deal
+                ? 'M5V 1A1'
+                : null,
+            distance: request.pass == GrocerySearchPass.deal ? 504 : null,
+          ),
+        ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations.single.result.id, 'regular');
+    },
+  );
+
+  test(
+    'sale without location verification falls back to Regular Price',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            request.pass == GrocerySearchPass.deal
+                ? 'unlocated-sale'
+                : 'regular',
+            pass: request.pass,
+            postalCode: null,
+            distance: null,
+          ),
+        ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.status, DealsResultStatus.regularPricesFound);
+      expect(outcome.onlineRecommendations.single.result.id, 'regular');
+    },
+  );
+
+  test('local product without explicit sale evidence is not a deal', () async {
+    final provider = _Provider(
+      (request) => [
+        _result(
+          request.pass == GrocerySearchPass.deal ? 'ordinary-local' : 'regular',
+          pass: request.pass,
+          postalCode: 'H2X 1Y4',
+          distance: 2,
+          saleEvidence: request.pass != GrocerySearchPass.deal,
+        ),
+      ],
+    );
+    final outcome = await _montrealEngine(provider).findPrices([_need()]);
+    expect(outcome.status, DealsResultStatus.regularPricesFound);
+    expect(outcome.nearbyRecommendations, isEmpty);
+  });
+
+  test('delivery-only evidence never verifies deal location', () async {
+    final provider = _Provider(
+      (request) => [
+        _result(
+          request.pass == GrocerySearchPass.deal ? 'delivery-sale' : 'regular',
+          pass: request.pass,
+          postalCode: null,
+          distance: null,
+          availabilityVerified: true,
+          locationVerified: false,
+        ),
+      ],
+    );
+    final outcome = await _montrealEngine(provider).findPrices([_need()]);
+    expect(outcome.nearbyRecommendations, isEmpty);
+    expect(outcome.onlineRecommendations.single.result.id, 'regular');
+  });
+
+  test('valid sale and reference price calculate savings percentage', () async {
+    final provider = _Provider(
+      (request) => [
+        _result(
+          'sale',
+          pass: request.pass,
+          postalCode: 'H2X 1Y4',
+          distance: 1,
+          price: 10,
+          regularPrice: 16,
+        ),
+      ],
+    );
+    final outcome = await _montrealEngine(provider).findPrices([_need()]);
+    expect(outcome.nearbyRecommendations.single.discountPercent, 37.5);
+  });
+
+  test(
+    'sale without reference price remains a deal without fabricated discount',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            'sale-no-reference',
+            pass: request.pass,
+            postalCode: 'H2X 1Y4',
+            distance: 1,
+            includeRegularPrice: false,
+          ),
+        ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.nearbyRecommendations.single.isDeal, isTrue);
+      expect(outcome.nearbyRecommendations.single.discountPercent, isNull);
+    },
+  );
+
+  test(
+    'Nearby Deal ranks ahead of Regular Price for the requested item',
+    () async {
+      final provider = _Provider(
+        (request) => request.pass == GrocerySearchPass.deal
+            ? [
+                _result(
+                  'nearby-deal',
+                  pass: request.pass,
+                  postalCode: 'H2X 1Y4',
+                  distance: 2,
+                ),
+              ]
+            : [
+                _result(
+                  'regular',
+                  pass: request.pass,
+                  postalCode: null,
+                  distance: null,
+                ),
+              ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.recommendations.single.result.id, 'nearby-deal');
+      expect(provider.passes, [GrocerySearchPass.deal]);
+    },
+  );
 }
 
 GroceryDealsEngine _engine(GrocerySearchProvider provider) =>
     GroceryDealsEngine(
       locationService: const FixedDealsLocationService(
         UserShoppingArea(postalCode: 'M5V 2T6', radiusKm: 15),
+      ),
+      provider: provider,
+      now: () => DateTime.utc(2026, 9, 17),
+    );
+
+GroceryDealsEngine _montrealEngine(GrocerySearchProvider provider) =>
+    GroceryDealsEngine(
+      locationService: const FixedDealsLocationService(
+        UserShoppingArea(postalCode: 'H2X 1Y4', radiusKm: 15),
       ),
       provider: provider,
       now: () => DateTime.utc(2026, 9, 17),
@@ -405,6 +592,11 @@ GrocerySearchResult _result(
   DateTime? verifiedAt,
   bool availabilityVerified = true,
   bool sponsoredOnly = false,
+  bool? dealVerified,
+  bool? locationVerified,
+  bool? saleEvidence,
+  double? regularPrice,
+  bool includeRegularPrice = true,
 }) => GrocerySearchResult(
   id: id,
   productName: productName,
@@ -415,7 +607,9 @@ GrocerySearchResult _result(
   priceKind: pass == GrocerySearchPass.deal
       ? GroceryPriceKind.sale
       : GroceryPriceKind.regular,
-  regularPrice: pass == GrocerySearchPass.deal ? 15 : null,
+  regularPrice: includeRegularPrice
+      ? (regularPrice ?? (pass == GrocerySearchPass.deal ? 15 : null))
+      : null,
   packageQuantity: packageQuantity,
   packageUnitType: FoodUnitType.mass,
   providerDistanceKm: distance,
@@ -425,6 +619,11 @@ GrocerySearchResult _result(
   availabilityVerified: availabilityVerified,
   sponsoredOnly: sponsoredOnly,
   validUntil: pass == GrocerySearchPass.deal ? DateTime.utc(2026, 9, 18) : null,
+  dealVerified: dealVerified ?? pass == GrocerySearchPass.deal,
+  locationVerified: locationVerified ?? distance != null,
+  onlineOnly: distance == null,
+  saleEvidence: saleEvidence ?? pass == GrocerySearchPass.deal,
+  radiusKm: 15,
 );
 
 class _Provider implements GrocerySearchProvider {

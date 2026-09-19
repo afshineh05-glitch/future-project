@@ -7,6 +7,7 @@ import {
 import {
   acceptUniqueEvidence,
   blockingReasonsForOnline,
+  ingredientMatch,
   isAllowedRedirect,
   isAllowedRetailerUrl,
   isLikelyProductDetailUrl,
@@ -25,7 +26,7 @@ const regularFixture = `<!doctype html><script type="application/ld+json">
 {"@type":"Product","name":"Chicken Breast 1 kg","offers":{"@type":"Offer","price":"12.99","priceCurrency":"CAD","availability":"https://schema.org/InStock","seller":{"@type":"GroceryStore","name":"Metro","address":{"postalCode":"H2X 1Y4"}}}}
 </script>`;
 const saleFixture = `<!doctype html><script type="application/ld+json">
-{"@graph":[{"@type":"Product","name":"Chicken Breast 1 kg","offers":{"price":9.99,"priceCurrency":"CAD","priceValidUntil":"2099-12-31","availability":"InStock","seller":{"name":"Metro","address":{"postalCode":"H2X 1Y4"}},"listPrice":14.99}}]}
+{"@graph":[{"@type":"Product","name":"Chicken Breast 1 kg","offers":{"price":9.99,"priceCurrency":"CAD","priceValidUntil":"2099-12-31","availability":"InStock","seller":{"@type":"GroceryStore","name":"Metro","address":{"postalCode":"H2X 1Y4"}},"listPrice":14.99}}]}
 </script>`;
 const oliveOilOnlineFixture =
   `<!doctype html><script type="application/ld+json">
@@ -54,6 +55,84 @@ Deno.test("valid regular Product/Offer evidence is accepted", () => {
   );
 });
 
+Deno.test("raw turkey breast matching accepts cooking ingredients", () => {
+  for (const title of [
+    "Raw Turkey Breast",
+    "Fresh Boneless Turkey Breast",
+    "Frozen Turkey Breast 1 kg",
+    "Raw Turkey Breast Roast",
+  ]) {
+    assert(ingredientMatch(title, ["turkey breast"]).matches, title);
+  }
+});
+
+Deno.test("raw turkey breast matching rejects deli and prepared products", () => {
+  for (const title of [
+    "Turkey Breast Deli Slices",
+    "Oven Roasted Deli Turkey Breast",
+    "Your Fresh Market Oven Roasted Turkey Breast",
+    "Your Fresh Market Oven Roasted Herbed Turkey Breast",
+    "Smoked Turkey Breast Cold Cuts",
+    "Turkey Breast Sandwich Meat",
+    "Boneless Turkey Breast Roast",
+  ]) {
+    const match = ingredientMatch(title, ["turkey breast"]);
+    assertFalse(match.matches, title);
+    assertEquals(match.reason, "processed_prepared_product", title);
+  }
+});
+
+Deno.test("raw chicken breast matching accepts cooking ingredients", () => {
+  for (const title of [
+    "Fresh Chicken Breast",
+    "Frozen Raw Chicken Breast",
+    "Boneless Skinless Chicken Breast",
+  ]) {
+    assert(ingredientMatch(title, ["chicken breast"]).matches, title);
+  }
+});
+
+Deno.test("raw chicken breast matching rejects processed products", () => {
+  for (const title of [
+    "Cooked Chicken Breast Strips",
+    "Breaded Chicken Breast",
+    "Chicken Breast Deli Slices",
+    "Chicken Breast Nuggets",
+    "Your Fresh Market Kansas City Style BBQ Chicken Breast Skewers",
+  ]) {
+    const match = ingredientMatch(title, ["chicken breast"]);
+    assertFalse(match.matches, title);
+    assertEquals(match.reason, "processed_prepared_product", title);
+  }
+});
+
+Deno.test("basic non-protein ingredients retain matching behavior", () => {
+  assert(ingredientMatch("Dainty Brown Rice 900 g", ["brown rice"]).matches);
+  assert(ingredientMatch("No Name Chickpeas 540 mL", ["chickpeas"]).matches);
+  assert(ingredientMatch("Extra Virgin Olive Oil 1 L", ["olive oil"]).matches);
+});
+
+Deno.test("processed raw-protein Shopping evidence is blocking", () => {
+  const evidence = parseShoppingListing({
+    ...shoppingFixture,
+    title: "Turkey Breast Deli Slices 400 g",
+  });
+  assertEquals(
+    blockingReasonsForOnline(
+      rejectionReasons(evidence, "regularPrice", ["turkey breast"]),
+    ),
+    ["processed_prepared_product"],
+  );
+});
+
+Deno.test("merchant resolution rejects a processed substitute", () => {
+  assertFalse(resolvedTitleMatchesShopping(
+    "Fresh Boneless Turkey Breast 1 kg",
+    "Oven Roasted Deli Turkey Breast Slices | Walmart Canada",
+    ["turkey breast"],
+  ));
+});
+
 Deno.test("valid sale evidence requires current, regular, and future validity", () => {
   const evidence = parseRetailerPage(saleFixture);
   assertEquals(
@@ -76,6 +155,47 @@ Deno.test("stale sale evidence is rejected", () => {
       ["chicken breast"],
       new Date("2100-01-01"),
     ).includes("stale_deal"),
+  );
+});
+
+Deno.test("explicit sale without reference price is allowed without fabricated savings", () => {
+  const evidence = parseRetailerPage(
+    `${saleFixture.replace(',"listPrice":14.99', "")}<span>Sale price</span>`,
+  );
+  const reasons = rejectionReasons(
+    evidence,
+    "deal",
+    ["chicken breast"],
+    new Date("2026-01-01"),
+  );
+  assertEquals(reasons, []);
+  assertEquals(evidence.regularPrice, null);
+});
+
+Deno.test("sale without verified store location is rejected as nearby", () => {
+  const evidence = parseRetailerPage(
+    saleFixture.replace(',"address":{"postalCode":"H2X 1Y4"}', ""),
+  );
+  const reasons = rejectionReasons(
+    evidence,
+    "deal",
+    ["chicken breast"],
+    new Date("2026-01-01"),
+  );
+  assert(reasons.includes("missing_location"));
+});
+
+Deno.test("delivery text never becomes verified store location", () => {
+  const evidence = parseShoppingListing({
+    ...shoppingFixture,
+    delivery: "Delivery available in Montreal H2X 1Y4",
+  });
+  assertEquals(evidence.storePostalCode, "H2X 1Y4");
+  assertFalse(evidence.locationEvidenceVerified);
+  assert(
+    rejectionReasons(evidence, "regularPrice", ["brown rice"]).includes(
+      "missing_location",
+    ),
   );
 });
 

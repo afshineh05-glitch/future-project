@@ -75,6 +75,11 @@ class SerperGrocerySearchProvider implements GrocerySearchProvider {
       verifiedAt: date('verifiedAt'),
       availabilityVerified: raw['availabilityVerified'] == true,
       sponsoredOnly: raw['sponsoredOnly'] == true,
+      dealVerified: raw['dealVerified'] == true,
+      locationVerified: raw['locationVerified'] == true,
+      onlineOnly: raw['onlineOnly'] != false,
+      saleEvidence: raw['saleEvidence'] == true,
+      radiusKm: (raw['radiusKm'] as num?)?.toDouble(),
     );
   }
 }

@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   acceptUniqueEvidence,
   blockingReasonsForOnline,
+  ingredientMatch,
   isLikelyProductDetailUrl,
   isPrivateOrReservedIp,
   PAGE_MAX_BYTES,
@@ -278,11 +279,23 @@ Deno.serve(async (req) => {
     organicFallbackRequested: false,
     shoppingReceived: 0,
     shoppingRelevant: 0,
+    rawIngredientCandidates: 0,
+    processedPreparedRejected: 0,
     merchantResolutionAttempted: 0,
     merchantResolutionSucceeded: 0,
     merchantResolutionRejected: 0,
     acceptedShopping: 0,
     organicFallback: false,
+    totalSerperRequests: 0,
+    shoppingRequests: 0,
+    searchRequests: 0,
+    merchantResolutionRequests: 0,
+    organicFallbackRequests: 0,
+    dealSearchRequests: 0,
+    dealCandidatesReceived: 0,
+    dealLocationVerified: 0,
+    dealEvidenceVerified: 0,
+    acceptedNearbyDeals: 0,
   };
   try {
     const auth = req.headers.get("Authorization") ?? "";
@@ -359,7 +372,19 @@ Deno.serve(async (req) => {
     const query = `"${
       terms[0]
     }" ${intent} "${postal}" Montreal Quebec Canada (${sites}) -sponsored`;
-    const serperRequest = async (path: "shopping" | "search", q: string) => {
+    const serperRequest = async (
+      path: "shopping" | "search",
+      q: string,
+      purpose: "shopping" | "search" | "merchant" | "fallback" | "deal" = path,
+    ) => {
+      providerDiagnostics.totalSerperRequests++;
+      if (path === "shopping") providerDiagnostics.shoppingRequests++;
+      else providerDiagnostics.searchRequests++;
+      if (purpose === "merchant") {
+        providerDiagnostics.merchantResolutionRequests++;
+      }
+      if (purpose === "fallback") providerDiagnostics.organicFallbackRequests++;
+      if (purpose === "deal") providerDiagnostics.dealSearchRequests++;
       const response = await fetch(`https://google.serper.dev/${path}`, {
         method: "POST",
         headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
@@ -437,12 +462,19 @@ Deno.serve(async (req) => {
       rawItems: unknown[],
       source: "shopping" | "organicFallback",
     ) => {
+      if (pass === "deal") {
+        providerDiagnostics.dealCandidatesReceived += rawItems.length;
+      }
       for (const raw of rawItems) {
         if (!raw || typeof raw !== "object") continue;
         const item = raw as Record<string, unknown>;
         const sourceUrl = String(item.link ?? "");
         const retailer = retailerForUrl(sourceUrl);
         if (!retailer || !isRetailerUrl(sourceUrl)) continue;
+        if (pass === "deal" && !isLikelyProductDetailUrl(sourceUrl)) {
+          reject("generic_retailer_page");
+          continue;
+        }
         const listingEvidence = source === "shopping"
           ? parseShoppingListing(item)
           : parseSearchListing(item);
@@ -501,7 +533,9 @@ Deno.serve(async (req) => {
           }
         }
         const reasons = rejectionReasons(evidence, pass, terms);
-        const blockingReasons = blockingReasonsForOnline(reasons);
+        const blockingReasons = pass === "deal"
+          ? reasons
+          : blockingReasonsForOnline(reasons);
         if (blockingReasons.length > 0) {
           for (const reason of blockingReasons) reject(reason);
           continue;
@@ -529,6 +563,9 @@ Deno.serve(async (req) => {
             const candidateDistance = km(origin, destination);
             if (candidateDistance <= radius) {
               distanceKm = candidateDistance;
+              if (pass === "deal") {
+                providerDiagnostics.dealLocationVerified++;
+              }
             } else {
               onlineOnly.outside_radius = (onlineOnly.outside_radius ?? 0) + 1;
             }
@@ -537,6 +574,17 @@ Deno.serve(async (req) => {
               1;
           }
         }
+        if (pass === "deal" && distanceKm == null) {
+          reject("unverified_radius");
+          continue;
+        }
+        if (pass === "deal") {
+          providerDiagnostics.dealEvidenceVerified++;
+        }
+        const comparableRegularPrice = evidence.regularPrice != null &&
+            evidence.regularPrice! > evidence.price!
+          ? evidence.regularPrice
+          : null;
         results.push({
           id: sourceUrl,
           productName: evidence.productName,
@@ -544,7 +592,9 @@ Deno.serve(async (req) => {
           storePostalCode: storePostal,
           distanceKm,
           price: evidence.price!,
-          regularPrice: evidence.regularPrice,
+          currentPrice: evidence.price!,
+          salePrice: pass === "deal" ? evidence.price! : null,
+          regularPrice: comparableRegularPrice,
           currency: "CAD",
           priceKind: pass === "deal" ? "sale" : "regular",
           packageQuantity: evidence.packageQuantity,
@@ -559,6 +609,10 @@ Deno.serve(async (req) => {
           packageConfirmed: evidence.packageQuantity != null &&
             evidence.packageUnitType != null,
           locationVerified: distanceKm != null,
+          dealVerified: pass === "deal",
+          onlineOnly: distanceKm == null,
+          saleEvidence: evidence.saleEvidence,
+          radiusKm: radius,
           discoverySource: source === "shopping"
             ? "serper_shopping"
             : "serper_organic_fallback",
@@ -567,6 +621,9 @@ Deno.serve(async (req) => {
         discovery[source]++;
         if (source === "shopping") {
           providerDiagnostics.acceptedShopping++;
+        }
+        if (pass === "deal") {
+          providerDiagnostics.acceptedNearbyDeals++;
         }
       }
     };
@@ -578,6 +635,16 @@ Deno.serve(async (req) => {
       const shoppingItems = Array.isArray(shoppingPayload.shopping)
         ? shoppingPayload.shopping
         : [];
+      shoppingItems.sort((left, right) => {
+        const leftTitle = left && typeof left === "object"
+          ? String((left as Record<string, unknown>).title ?? "")
+          : "";
+        const rightTitle = right && typeof right === "object"
+          ? String((right as Record<string, unknown>).title ?? "")
+          : "";
+        return ingredientMatch(rightTitle, terms).quality -
+          ingredientMatch(leftTitle, terms).quality;
+      });
       const directItems: Record<string, unknown>[] = [];
       const resolutionCandidates: Array<{
         item: Record<string, unknown>;
@@ -589,6 +656,12 @@ Deno.serve(async (req) => {
         if (!raw || typeof raw !== "object") continue;
         const item = raw as Record<string, unknown>;
         const evidence = parseShoppingListing(item);
+        const rawMatch = ingredientMatch(evidence.productName, terms);
+        if (rawMatch.matches && rawMatch.category === "raw_protein") {
+          providerDiagnostics.rawIngredientCandidates++;
+        } else if (rawMatch.reason === "processed_prepared_product") {
+          providerDiagnostics.processedPreparedRejected++;
+        }
         const domain = retailerDomainForShoppingSource(
           String(item.source ?? ""),
           retailerSourceAliases,
@@ -650,6 +723,7 @@ Deno.serve(async (req) => {
         const resolution = await serperRequest(
           "search",
           `site:${candidate.domain} "${title}"`,
+          "merchant",
         );
         const organic = Array.isArray(resolution.organic)
           ? resolution.organic
@@ -689,7 +763,11 @@ Deno.serve(async (req) => {
       if (results.length === 0) {
         providerDiagnostics.organicFallbackRequested = true;
         providerDiagnostics.organicFallback = true;
-        const fallbackPayload = await serperRequest("search", query);
+        const fallbackPayload = await serperRequest(
+          "search",
+          query,
+          "fallback",
+        );
         await collect(
           Array.isArray(fallbackPayload.organic) ? fallbackPayload.organic : [],
           "organicFallback",
@@ -697,7 +775,7 @@ Deno.serve(async (req) => {
       }
     } else {
       // Verified Nearby Deals retain the existing strict organic/page-evidence path.
-      const dealPayload = await serperRequest("search", query);
+      const dealPayload = await serperRequest("search", query, "deal");
       await collect(
         Array.isArray(dealPayload.organic) ? dealPayload.organic : [],
         "organicFallback",

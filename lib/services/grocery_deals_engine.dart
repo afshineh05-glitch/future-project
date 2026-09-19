@@ -63,8 +63,9 @@ class GroceryDealsEngine {
 
     var failed = false;
     final dealsNearby = <GroceryRecommendation>[];
-    final dealsOnline = <GroceryRecommendation>[];
+    final regularPrices = <GroceryRecommendation>[];
     for (final entry in needs) {
+      var hasNearbyDeal = false;
       try {
         final results = await provider.search(
           _request(entry.need, entry.food!, area, GrocerySearchPass.deal),
@@ -76,26 +77,13 @@ class GroceryDealsEngine {
           results,
           GrocerySearchPass.deal,
         );
-        dealsNearby.addAll(validated.where((item) => item.isVerifiedNearby));
-        dealsOnline.addAll(validated.where((item) => !item.isVerifiedNearby));
+        final nearby = validated.where((item) => item.isVerifiedNearby);
+        dealsNearby.addAll(nearby);
+        hasNearbyDeal = nearby.isNotEmpty;
       } catch (_) {
         failed = true;
       }
-    }
-    if (dealsNearby.isNotEmpty || dealsOnline.isNotEmpty) {
-      dealsNearby.sort(_compare);
-      dealsOnline.sort(_compare);
-      return GroceryDealsOutcome(
-        status: DealsResultStatus.dealsFound,
-        providerFailed: failed,
-        nearbyRecommendations: dealsNearby,
-        onlineRecommendations: dealsOnline,
-      );
-    }
-
-    final regularNearby = <GroceryRecommendation>[];
-    final regularOnline = <GroceryRecommendation>[];
-    for (final entry in needs) {
+      if (hasNearbyDeal) continue;
       try {
         final results = await provider.search(
           _request(
@@ -112,21 +100,22 @@ class GroceryDealsEngine {
           results,
           GrocerySearchPass.regularPrice,
         );
-        regularNearby.addAll(validated.where((item) => item.isVerifiedNearby));
-        regularOnline.addAll(validated.where((item) => !item.isVerifiedNearby));
+        regularPrices.addAll(validated);
       } catch (_) {
         failed = true;
       }
     }
-    regularNearby.sort(_compare);
-    regularOnline.sort(_compare);
+    dealsNearby.sort(_compare);
+    regularPrices.sort(_compare);
     return GroceryDealsOutcome(
-      status: regularNearby.isEmpty && regularOnline.isEmpty
+      status: dealsNearby.isNotEmpty
+          ? DealsResultStatus.dealsFound
+          : regularPrices.isEmpty
           ? DealsResultStatus.noReliablePrice
           : DealsResultStatus.regularPricesFound,
       providerFailed: failed,
-      nearbyRecommendations: regularNearby,
-      onlineRecommendations: regularOnline,
+      nearbyRecommendations: dealsNearby,
+      onlineRecommendations: regularPrices,
     );
   }
 
@@ -174,9 +163,10 @@ class GroceryDealsEngine {
               (pass == GrocerySearchPass.deal &&
                   (result.priceKind != GroceryPriceKind.sale ||
                       result.dealConfidence < .7 ||
-                      result.regularPrice == null ||
-                      result.regularPrice! <= result.price ||
-                      result.validUntil == null)) ||
+                      !result.dealVerified ||
+                      !result.saleEvidence ||
+                      !result.locationVerified ||
+                      result.onlineOnly)) ||
               (pass == GrocerySearchPass.regularPrice &&
                   result.priceKind != GroceryPriceKind.regular) ||
               (result.validFrom != null &&
@@ -193,16 +183,14 @@ class GroceryDealsEngine {
           if (distance != null && distance < 0) {
             return null;
           }
-          final packageConfirmed =
-              result.packageQuantity != null &&
-              result.packageUnitType != null &&
-              result.packageQuantity!.isFinite &&
-              result.packageQuantity! > 0;
           final nearbyEvidenceComplete =
+              pass == GrocerySearchPass.deal &&
+              result.dealVerified &&
+              result.saleEvidence &&
+              result.locationVerified &&
+              !result.onlineOnly &&
               distance != null &&
-              distance <= area.radiusKm &&
-              packageConfirmed &&
-              result.availabilityVerified;
+              distance <= area.radiusKm;
           final normalized = PriceNormalizer.perCanonicalUnit(
             price: result.price,
             packageQuantity: result.packageQuantity,

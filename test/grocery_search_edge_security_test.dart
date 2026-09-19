@@ -56,10 +56,17 @@ void main() {
     expect(source, contains('if (pass === "regularPrice")'));
     expect(
       source,
-      contains('const dealPayload = await serperRequest("search", query)'),
+      contains(
+        'const dealPayload = await serperRequest("search", query, "deal")',
+      ),
     );
     expect(source, contains('rejectionReasons(evidence, pass, terms)'));
     expect(source, contains('candidateDistance <= radius'));
+    expect(source, contains('const blockingReasons = pass === "deal"'));
+    expect(source, contains('? reasons'));
+    expect(source, contains('if (pass === "deal" && distanceKm == null)'));
+    expect(source, contains('dealVerified: pass === "deal"'));
+    expect(source, contains('locationVerified: distanceKm != null'));
   });
 
   test('untrusted discovery results require explicit commerce evidence', () {

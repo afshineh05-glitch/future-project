@@ -242,6 +242,11 @@ GrocerySearchResult _result({required GrocerySearchPass pass}) =>
       sourceName: 'retailer.example',
       verifiedAt: DateTime.utc(2026, 9, 17),
       availabilityVerified: true,
+      dealVerified: pass == GrocerySearchPass.deal,
+      locationVerified: true,
+      onlineOnly: false,
+      saleEvidence: pass == GrocerySearchPass.deal,
+      radiusKm: 15,
       validUntil: pass == GrocerySearchPass.deal
           ? DateTime.utc(2026, 9, 18)
           : null,
