@@ -193,6 +193,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
           // A missing/unavailable area is rendered in the deals section.
         }
         if (mounted) setState(() {});
+        unawaited(_itemDealsController.searchAll(value.groceryList));
       }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -295,6 +296,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
         _shoppingArea = null;
       }
       if (mounted) setState(() {});
+      unawaited(_itemDealsController.searchAll(_state!.groceryList));
     }
   }
 
@@ -654,6 +656,7 @@ class _IntelligentFridgeScreenState extends State<IntelligentFridgeScreen> {
                     state: _itemDealsController.state,
                     onChangeArea: _editShoppingArea,
                     onRetry: _itemDealsController.retry,
+                    onLoadMore: _itemDealsController.loadMore,
                     onOpenSource: _openDealSource,
                   ),
                 ],

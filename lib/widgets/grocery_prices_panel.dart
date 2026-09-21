@@ -8,6 +8,7 @@ class GroceryPricesPanel extends StatelessWidget {
   final GroceryItemDealsState state;
   final VoidCallback onChangeArea;
   final VoidCallback onRetry;
+  final VoidCallback onLoadMore;
   final ValueChanged<Uri> onOpenSource;
 
   const GroceryPricesPanel({
@@ -15,6 +16,7 @@ class GroceryPricesPanel extends StatelessWidget {
     required this.state,
     required this.onChangeArea,
     required this.onRetry,
+    required this.onLoadMore,
     required this.onOpenSource,
   });
 
@@ -28,7 +30,9 @@ class GroceryPricesPanel extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                selectedName == null
+                state.isBatch
+                    ? 'Grocery Deals & Prices'
+                    : selectedName == null
                     ? 'Grocery Prices'
                     : 'Grocery Prices · $selectedName',
                 key: const Key('grocery-prices-header'),
@@ -53,13 +57,16 @@ class GroceryPricesPanel extends StatelessWidget {
       case GroceryItemDealsViewStatus.idle:
         return const _MessageCard('Select a grocery item to find prices.');
       case GroceryItemDealsViewStatus.loading:
-        return const _MessageCard(
-          'Finding prices...',
-          leading: SizedBox.square(
-            dimension: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        );
+        if (state.outcome == null) {
+          return const _MessageCard(
+            'Finding prices...',
+            leading: SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        break;
       case GroceryItemDealsViewStatus.error:
         return _MessageCard(
           'Prices are temporarily unavailable.',
@@ -86,8 +93,10 @@ class GroceryPricesPanel extends StatelessWidget {
     final nearby = outcome.nearbyRecommendations
         .where(
           (item) =>
+              item.isVerifiedNearby &&
               item.result.dealVerified &&
               item.result.locationVerified &&
+              item.distanceKm != null &&
               item.isDeal,
         )
         .toList(growable: false);
@@ -101,28 +110,64 @@ class GroceryPricesPanel extends StatelessWidget {
         if (nearby.isNotEmpty) ...[
           const _SectionTitle('Deals Near You'),
           const SizedBox(height: 8),
-          ...nearby.map(
-            (item) => _PriceCard(
-              recommendation: item,
-              deal: true,
-              onOpenSource: onOpenSource,
-            ),
-          ),
+          ..._groupedCards(nearby, deal: true),
         ],
         if (online.isNotEmpty) ...[
           if (nearby.isNotEmpty) const SizedBox(height: 12),
           const _SectionTitle('Online Store Prices'),
           const SizedBox(height: 8),
-          ...online.map(
-            (item) => _PriceCard(
-              recommendation: item,
-              deal: false,
-              onOpenSource: onOpenSource,
+          ..._groupedCards(online, deal: false),
+        ],
+        if (state.hasMore) ...[
+          const SizedBox(height: 4),
+          if (state.isLoading)
+            const _MessageCard(
+              'Finding more prices...',
+              leading: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: onLoadMore,
+              icon: const Icon(Icons.expand_more),
+              label: Text(
+                'Find prices for ${state.totalItemCount - state.searchedItemCount} more items',
+              ),
             ),
-          ),
         ],
       ],
     );
+  }
+
+  List<Widget> _groupedCards(
+    List<GroceryRecommendation> items, {
+    required bool deal,
+  }) {
+    final groups = <String, List<GroceryRecommendation>>{};
+    for (final item in items) {
+      groups.putIfAbsent(item.foodName, () => []).add(item);
+    }
+    return [
+      for (final entry in groups.entries) ...[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            entry.key,
+            key: ValueKey('grocery-price-group-${entry.value.first.foodId}'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+        ...entry.value.map(
+          (item) => _PriceCard(
+            recommendation: item,
+            deal: deal,
+            onOpenSource: onOpenSource,
+          ),
+        ),
+      ],
+    ];
   }
 }
 

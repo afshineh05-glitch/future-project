@@ -432,6 +432,53 @@ void main() {
   );
 
   test(
+    'Montreal user with Ottawa deal rejects Nearby Deal and uses regular price',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            request.pass == GrocerySearchPass.deal ? 'ottawa-deal' : 'regular',
+            pass: request.pass,
+            postalCode: request.pass == GrocerySearchPass.deal
+                ? 'K1P 1J1'
+                : null,
+            distance: request.pass == GrocerySearchPass.deal ? 199 : null,
+          ),
+        ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations.single.result.id, 'regular');
+    },
+  );
+
+  test(
+    'remote regular price remains online and never becomes Nearby',
+    () async {
+      final provider = _Provider(
+        (request) => request.pass == GrocerySearchPass.deal
+            ? const []
+            : [
+                _result(
+                  'ottawa-online',
+                  pass: request.pass,
+                  postalCode: 'K1P 1J1',
+                  distance: null,
+                  locationVerified: false,
+                ),
+              ],
+      );
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(
+        outcome.onlineRecommendations.single.tier,
+        GroceryResultTier.onlineStore,
+      );
+      expect(outcome.onlineRecommendations.single.result.id, 'ottawa-online');
+    },
+  );
+
+  test(
     'sale without location verification falls back to Regular Price',
     () async {
       final provider = _Provider(

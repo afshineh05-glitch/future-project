@@ -134,6 +134,54 @@ void main() {
     expect(find.text('Boneless Skinless Chicken Breast'), findsOneWidget);
   });
 
+  testWidgets('multiple grocery items render in their own ingredient groups', (
+    tester,
+  ) async {
+    final chicken = _need('chicken_breast');
+    final turkey = _need('turkey');
+    await _pump(
+      tester,
+      GroceryItemDealsState(
+        requestedItems: [chicken, turkey],
+        shoppingArea: const UserShoppingArea(
+          postalCode: 'H2X 1Y4',
+          radiusKm: 15,
+        ),
+        searchedItemCount: 2,
+        totalItemCount: 2,
+        outcome: GroceryDealsOutcome(
+          status: DealsResultStatus.regularPricesFound,
+          onlineRecommendations: [
+            _recommendation(
+              'chicken-result',
+              foodId: 'chicken_breast',
+              foodName: 'Chicken Breast',
+              product: 'Boneless Skinless Chicken Breast',
+            ),
+            _recommendation(
+              'turkey-result',
+              foodId: 'turkey',
+              foodName: 'Turkey Breast',
+              product: 'Fresh Turkey Breast',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('Grocery Deals & Prices'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('grocery-price-group-chicken_breast')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('grocery-price-group-turkey')),
+      findsOneWidget,
+    );
+    expect(find.text('Boneless Skinless Chicken Breast'), findsOneWidget);
+    expect(find.text('Fresh Turkey Breast'), findsOneWidget);
+  });
+
   testWidgets('loading, empty, and provider failure use consumer copy', (
     tester,
   ) async {
@@ -180,6 +228,7 @@ Future<void> _pump(
           state: state,
           onChangeArea: () {},
           onRetry: () {},
+          onLoadMore: () {},
           onOpenSource: onOpen ?? (_) {},
         ),
       ),
@@ -214,6 +263,8 @@ WeeklyFoodRequirement _need(String key) {
 
 GroceryRecommendation _recommendation(
   String id, {
+  String foodId = 'turkey',
+  String foodName = 'Turkey Breast',
   bool deal = false,
   bool local = false,
   double price = 9.70,
@@ -222,8 +273,8 @@ GroceryRecommendation _recommendation(
   String product = 'Free From Boneless Skinless Turkey Breast',
   Uri? source,
 }) => GroceryRecommendation(
-  foodId: 'turkey',
-  foodName: 'Turkey Breast',
+  foodId: foodId,
+  foodName: foodName,
   neededQuantity: 1000,
   result: GrocerySearchResult(
     id: id,
@@ -241,7 +292,9 @@ GroceryRecommendation _recommendation(
     saleEvidence: deal,
   ),
   distanceKm: local ? 2.4 : null,
-  tier: local ? GroceryResultTier.verifiedNearby : GroceryResultTier.onlineStore,
+  tier: local
+      ? GroceryResultTier.verifiedNearby
+      : GroceryResultTier.onlineStore,
   normalizedPrice: null,
   discountPercent: discountPercent,
   score: 80,

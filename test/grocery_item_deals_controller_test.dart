@@ -154,10 +154,77 @@ void main() {
     await failedController.select(item);
     expect(failedController.state.status, GroceryItemDealsViewStatus.error);
   });
+
+  test('multi-item search deduplicates and enforces five-item pages', () async {
+    final provider = _Provider();
+    final controller = _controller(provider: provider);
+    final items = [
+      _need('eggs', 900),
+      _need('tofu', 500),
+      _need('brown_rice', 1000),
+      _need('chickpeas', 700),
+      _need('olive_oil', 500),
+      _need('milk', 1000),
+      _need('cheese', 400),
+      _need('eggs', 600),
+    ];
+
+    await controller.searchAll(items);
+
+    expect(controller.state.totalItemCount, 7);
+    expect(controller.state.searchedItemCount, 5);
+    expect(controller.state.hasMore, isTrue);
+    expect(provider.requests, hasLength(10));
+    expect(provider.requests.map((request) => request.food.foodId).toSet(), {
+      'eggs',
+      'tofu',
+      'brown_rice',
+      'chickpeas',
+      'olive_oil',
+    });
+
+    await controller.loadMore();
+    expect(controller.state.searchedItemCount, 7);
+    expect(controller.state.hasMore, isFalse);
+    expect(provider.requests, hasLength(14));
+  });
+
+  test('unchanged multi-item search reuses recent results', () async {
+    final provider = _Provider();
+    final controller = _controller(provider: provider);
+    final items = [_need('eggs', 900), _need('tofu', 500)];
+
+    await controller.searchAll(items);
+    final initialRequests = provider.requests.length;
+    await controller.searchAll(items);
+
+    expect(provider.requests, hasLength(initialRequests));
+  });
+
+  test('one failed grocery item preserves valid results for another', () async {
+    final provider = _CallbackProvider((request) {
+      if (request.food.foodId == 'turkey') throw StateError('offline');
+      if (request.pass == GrocerySearchPass.deal) return const [];
+      return [_resultForRequest(request)];
+    });
+    final controller = _controller(provider: provider);
+
+    await controller.searchAll([
+      _need('turkey', 900),
+      _need('chicken_breast', 1000),
+    ]);
+
+    expect(controller.state.status, GroceryItemDealsViewStatus.results);
+    expect(controller.state.outcome!.providerFailed, isTrue);
+    expect(
+      controller.state.outcome!.onlineRecommendations.single.foodId,
+      'chicken_breast',
+    );
+  });
 }
 
 GroceryItemDealsController _controller({
-  required _Provider provider,
+  required GrocerySearchProvider provider,
   UserShoppingArea? area = const UserShoppingArea(
     postalCode: 'M5V 2T6',
     radiusKm: 15,
@@ -222,6 +289,34 @@ class _Provider implements GrocerySearchProvider {
     return Future.value(results);
   }
 }
+
+class _CallbackProvider implements GrocerySearchProvider {
+  final List<GrocerySearchRequest> requests = [];
+  final List<GrocerySearchResult> Function(GrocerySearchRequest) callback;
+  _CallbackProvider(this.callback);
+
+  @override
+  Future<List<GrocerySearchResult>> search(GrocerySearchRequest request) async {
+    requests.add(request);
+    return callback(request);
+  }
+}
+
+GrocerySearchResult _resultForRequest(GrocerySearchRequest request) =>
+    GrocerySearchResult(
+      id: '${request.food.foodId}-${request.pass.name}',
+      productName: request.food.canonicalName,
+      storeName: 'Online Store',
+      storeLocation: const StoreLocation(),
+      price: 8,
+      currency: 'CAD',
+      priceKind: GroceryPriceKind.regular,
+      sourceUri: Uri.parse(
+        'https://retailer.example/product/${request.food.foodId}',
+      ),
+      sourceName: 'retailer.example',
+      verifiedAt: DateTime.utc(2026, 9, 17),
+    );
 
 GrocerySearchResult _result({required GrocerySearchPass pass}) =>
     GrocerySearchResult(
