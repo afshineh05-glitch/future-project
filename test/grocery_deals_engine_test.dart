@@ -598,6 +598,38 @@ void main() {
       expect(provider.passes, [GrocerySearchPass.deal]);
     },
   );
+
+  test(
+    '17.5 km offer is not Nearby at 15 km but remains an Online Store Price',
+    () async {
+      final provider = _Provider(
+        (request) => [
+          _result(
+            'same-product-${request.pass.name}',
+            pass: request.pass,
+            postalCode: 'H2X 1Y4',
+            distance: 17.5,
+            productName: 'Fresh Chicken Breast',
+          ),
+        ],
+      );
+
+      final outcome = await _montrealEngine(provider).findPrices([_need()]);
+
+      expect(outcome.nearbyRecommendations, isEmpty);
+      expect(outcome.onlineRecommendations, hasLength(1));
+      expect(
+        outcome.onlineRecommendations.single.tier,
+        GroceryResultTier.onlineStore,
+      );
+      expect(outcome.onlineRecommendations.single.distanceKm, 17.5);
+      expect(outcome.onlineRecommendations.single.isDeal, isFalse);
+      expect(provider.passes, [
+        GrocerySearchPass.deal,
+        GrocerySearchPass.regularPrice,
+      ]);
+    },
+  );
 }
 
 GroceryDealsEngine _engine(GrocerySearchProvider provider) =>

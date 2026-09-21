@@ -23,6 +23,7 @@ class GroceryItemDealsState {
   final Object? error;
   final int searchedItemCount;
   final int totalItemCount;
+  final bool collectionMode;
 
   const GroceryItemDealsState({
     this.selectedItem,
@@ -33,9 +34,10 @@ class GroceryItemDealsState {
     this.error,
     this.searchedItemCount = 0,
     this.totalItemCount = 0,
+    this.collectionMode = false,
   });
 
-  bool get isBatch => requestedItems.length > 1;
+  bool get isBatch => collectionMode || requestedItems.length > 1;
   bool get hasMore => searchedItemCount < totalItemCount;
 
   GroceryItemDealsViewStatus get status {
@@ -77,6 +79,24 @@ class GroceryItemDealsController extends ChangeNotifier {
   GroceryItemDealsState get state => _state;
 
   Future<void> select(WeeklyFoodRequirement item) {
+    if (_state.collectionMode &&
+        _state.requestedItems.any(
+          (requested) => requested.food.key == item.food.key,
+        )) {
+      _state = GroceryItemDealsState(
+        selectedItem: item,
+        requestedItems: _state.requestedItems,
+        shoppingArea: _state.shoppingArea,
+        outcome: _state.outcome,
+        isLoading: _state.isLoading,
+        error: _state.error,
+        searchedItemCount: _state.searchedItemCount,
+        totalItemCount: _state.totalItemCount,
+        collectionMode: true,
+      );
+      notifyListeners();
+      return _active ?? Future<void>.value();
+    }
     final key = _key(item);
     if (_activeKey == key && (_active != null || _state.outcome != null)) {
       return _active ?? Future<void>.value();
@@ -98,7 +118,7 @@ class GroceryItemDealsController extends ChangeNotifier {
   }
 
   Future<void> retry() {
-    if (_lastRequested.length > 1) {
+    if (_state.collectionMode) {
       return searchAll(_lastRequested, forceRefresh: true);
     }
     final item = _state.selectedItem;
@@ -137,6 +157,7 @@ class GroceryItemDealsController extends ChangeNotifier {
       _lastRequested = const [];
       _state = const GroceryItemDealsState(
         outcome: GroceryDealsOutcome(status: DealsResultStatus.noReliablePrice),
+        collectionMode: true,
       );
       notifyListeners();
       return Future<void>.value();
@@ -154,6 +175,7 @@ class GroceryItemDealsController extends ChangeNotifier {
       requestedItems: unique,
       isLoading: true,
       totalItemCount: unique.length,
+      collectionMode: true,
     );
     notifyListeners();
     final operation = _runBatch(
@@ -181,6 +203,7 @@ class GroceryItemDealsController extends ChangeNotifier {
       isLoading: true,
       searchedItemCount: _state.searchedItemCount,
       totalItemCount: _lastRequested.length,
+      collectionMode: true,
     );
     notifyListeners();
     final operation = _runBatch(
@@ -297,6 +320,7 @@ class GroceryItemDealsController extends ChangeNotifier {
               status: DealsResultStatus.shoppingAreaRequired,
             ),
             totalItemCount: items.length,
+            collectionMode: true,
           ),
         );
         return;
@@ -351,6 +375,7 @@ class GroceryItemDealsController extends ChangeNotifier {
               : null,
           searchedItemCount: end,
           totalItemCount: items.length,
+          collectionMode: true,
         ),
       );
     } catch (error) {
@@ -363,6 +388,7 @@ class GroceryItemDealsController extends ChangeNotifier {
             error: error,
             searchedItemCount: start,
             totalItemCount: items.length,
+            collectionMode: true,
           ),
         );
       }

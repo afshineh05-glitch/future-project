@@ -182,6 +182,93 @@ void main() {
     expect(find.text('Fresh Turkey Breast'), findsOneWidget);
   });
 
+  testWidgets(
+    'automatic collection keeps grouped results when one item is focused',
+    (tester) async {
+      final chicken = _need('chicken_breast');
+      final eggs = _need('eggs');
+      await _pump(
+        tester,
+        GroceryItemDealsState(
+          selectedItem: chicken,
+          requestedItems: [chicken, eggs],
+          collectionMode: true,
+          shoppingArea: const UserShoppingArea(
+            postalCode: 'H2X 1Y4',
+            radiusKm: 15,
+          ),
+          searchedItemCount: 2,
+          totalItemCount: 2,
+          outcome: GroceryDealsOutcome(
+            status: DealsResultStatus.regularPricesFound,
+            onlineRecommendations: [
+              _recommendation(
+                'chicken-result',
+                foodId: 'chicken_breast',
+                foodName: 'Chicken Breast',
+                product: 'Fresh Chicken Breast',
+              ),
+              _recommendation(
+                'egg-result',
+                foodId: 'eggs',
+                foodName: 'Eggs',
+                product: 'Large Eggs 12 count',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('Grocery Deals & Prices'), findsOneWidget);
+      expect(find.text('Grocery Prices · Chicken Breast'), findsNothing);
+      expect(find.text('Chicken Breast'), findsOneWidget);
+      expect(find.text('Eggs'), findsOneWidget);
+      expect(find.text('Fresh Chicken Breast'), findsOneWidget);
+      expect(find.text('Large Eggs 12 count'), findsOneWidget);
+    },
+  );
+
+  testWidgets('collection exposes the progressive more-items action', (
+    tester,
+  ) async {
+    final items = [
+      _need('chicken_breast'),
+      _need('eggs'),
+      _need('brown_rice'),
+      _need('tofu'),
+      _need('milk'),
+      _need('cheese'),
+      _need('olive_oil'),
+    ];
+    var loads = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GroceryPricesPanel(
+            state: GroceryItemDealsState(
+              requestedItems: items,
+              collectionMode: true,
+              searchedItemCount: 5,
+              totalItemCount: 7,
+              outcome: GroceryDealsOutcome(
+                status: DealsResultStatus.regularPricesFound,
+                onlineRecommendations: [_recommendation('regular')],
+              ),
+            ),
+            onChangeArea: () {},
+            onRetry: () {},
+            onLoadMore: () => loads++,
+            onOpenSource: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Find prices for 2 more items'), findsOneWidget);
+    await tester.tap(find.text('Find prices for 2 more items'));
+    expect(loads, 1);
+  });
+
   testWidgets('loading, empty, and provider failure use consumer copy', (
     tester,
   ) async {

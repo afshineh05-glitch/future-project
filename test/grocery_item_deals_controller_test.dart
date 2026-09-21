@@ -221,6 +221,59 @@ void main() {
       'chicken_breast',
     );
   });
+
+  test('focused item does not suppress the automatic collection', () async {
+    final provider = _CallbackProvider((request) {
+      if (request.pass == GrocerySearchPass.deal) return const [];
+      return [_resultForRequest(request)];
+    });
+    final controller = _controller(provider: provider);
+    final items = [_need('eggs', 900), _need('brown_rice', 1000)];
+
+    await controller.searchAll(items);
+    final requestsBeforeFocus = provider.requests.length;
+    final outcomeBeforeFocus = controller.state.outcome;
+    await controller.select(items.first);
+
+    expect(controller.state.isBatch, isTrue);
+    expect(controller.state.selectedItem, same(items.first));
+    expect(controller.state.requestedItems, items);
+    expect(controller.state.outcome, same(outcomeBeforeFocus));
+    expect(controller.state.outcome!.onlineRecommendations, hasLength(2));
+    expect(provider.requests, hasLength(requestsBeforeFocus));
+  });
+
+  test(
+    'changing shopping area invalidates location-scoped cached results',
+    () async {
+      final location = _Location(
+        const UserShoppingArea(postalCode: 'H2X 1Y4', radiusKm: 15),
+      );
+      final provider = _CallbackProvider((request) => const []);
+      final controller = GroceryItemDealsController(
+        locationService: location,
+        expectedUserId: 'test-user',
+        engine: GroceryDealsEngine(
+          locationService: location,
+          provider: provider,
+        ),
+      );
+      final items = [_need('eggs', 900)];
+
+      await controller.searchAll(items);
+      final firstRequestCount = provider.requests.length;
+      location.area = const UserShoppingArea(
+        postalCode: 'K1P 1J1',
+        radiusKm: 15,
+      );
+      controller.invalidate();
+      await controller.searchAll(items);
+
+      expect(provider.requests, hasLength(firstRequestCount * 2));
+      expect(provider.requests.last.shoppingArea.postalCode, 'K1P 1J1');
+      expect(controller.state.shoppingArea!.postalCode, 'K1P 1J1');
+    },
+  );
 }
 
 GroceryItemDealsController _controller({
@@ -252,7 +305,7 @@ WeeklyFoodRequirement _need(String key, double purchaseGrams) {
 }
 
 class _Location implements DealsLocationService {
-  final UserShoppingArea? area;
+  UserShoppingArea? area;
   String userId = 'test-user';
   _Location(this.area);
 
