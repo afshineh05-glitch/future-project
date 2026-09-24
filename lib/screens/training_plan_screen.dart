@@ -343,8 +343,8 @@ class _TrainingPlanScreenState extends State<TrainingPlanScreen> {
           'Training Plan',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        backgroundColor: AppTheme.background,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.charcoal,
+        foregroundColor: AppTheme.textOnDark,
         elevation: 0,
         actions: [
           IconButton(

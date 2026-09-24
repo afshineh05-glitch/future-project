@@ -974,8 +974,8 @@ String _measurementSystem = 'metric';
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: AppTheme.background,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.charcoal,
+        foregroundColor: AppTheme.textOnDark,
         elevation: 0,
         leading: IconButton(
           tooltip: _isFirstStep ? 'Exit' : 'Back',

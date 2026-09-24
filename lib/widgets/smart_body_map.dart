@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:future_project/theme/app_theme.dart';
 
 class SmartBodyMap extends StatelessWidget {
   final List<String> primaryMuscles;
@@ -10,8 +11,8 @@ class SmartBodyMap extends StatelessWidget {
     required this.secondaryMuscles,
   });
 
-  static const Color _primary = Color(0xFF0B7A53);
-  static const Color _secondary = Color(0xFF91C97B);
+  static const Color _primary = AppTheme.metallicGold;
+  static const Color _secondary = AppTheme.bronzeGold;
   static const Color _muted = Color(0xFFDCE2E6);
   static const Color _text = Color(0xFF182234);
   static const Color _subtext = Color(0xFF687386);

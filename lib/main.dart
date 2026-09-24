@@ -107,6 +107,8 @@ class FutureProjectApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Future Project',
       theme: AppTheme.lightTheme,
+      themeAnimationDuration: const Duration(milliseconds: 220),
+      themeAnimationCurve: Curves.easeOutCubic,
       home: session != null ? const DashboardScreen() : const WelcomeScreen(),
     );
   }

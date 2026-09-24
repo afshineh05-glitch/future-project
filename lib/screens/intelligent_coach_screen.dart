@@ -167,8 +167,8 @@ class _IntelligentCoachScreenState extends State<IntelligentCoachScreen> {
           'Intelligent Coach',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: AppTheme.background,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.charcoal,
+        foregroundColor: AppTheme.textOnDark,
         elevation: 0,
       ),
       body: RefreshIndicator(

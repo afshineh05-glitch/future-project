@@ -85,8 +85,8 @@ class _BodyProgressScreenState extends State<BodyProgressScreen> {
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Body Progress'),
-        backgroundColor: AppTheme.background,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.charcoal,
+        foregroundColor: AppTheme.textOnDark,
         elevation: 0,
       ),
       body: _loading
