@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:future_project/config/supabase_config.dart';
 import 'package:future_project/screens/dashboard_screen.dart';
+import 'package:future_project/screens/password_recovery_screen.dart';
 import 'package:future_project/screens/welcome_screen.dart';
 import 'package:future_project/theme/app_theme.dart';
 
@@ -96,14 +97,42 @@ class _MuscleUpStartupState extends State<MuscleUpStartup> {
   }
 }
 
-class FutureProjectApp extends StatelessWidget {
+class FutureProjectApp extends StatefulWidget {
   const FutureProjectApp({super.key});
+
+  @override
+  State<FutureProjectApp> createState() => _FutureProjectAppState();
+}
+
+class _FutureProjectAppState extends State<FutureProjectApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      authState,
+    ) {
+      if (authState.event != AuthChangeEvent.passwordRecovery) return;
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute<void>(builder: (_) => const UpdatePasswordScreen()),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final Session? session = Supabase.instance.client.auth.currentSession;
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Future Project',
       theme: AppTheme.lightTheme,

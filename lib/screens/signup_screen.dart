@@ -13,11 +13,9 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  final TextEditingController _emailController =
-      TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
 
-  final TextEditingController _passwordController =
-      TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   final TextEditingController _confirmPasswordController =
       TextEditingController();
@@ -37,39 +35,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _signUp() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text;
-    final String confirmPassword =
-        _confirmPasswordController.text;
+    final String confirmPassword = _confirmPasswordController.text;
 
-    if (email.isEmpty ||
-        password.isEmpty ||
-        confirmPassword.isEmpty) {
+    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please complete all fields.',
-          ),
-        ),
+        const SnackBar(content: Text('Please complete all fields.')),
       );
       return;
     }
 
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Passwords do not match.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match.')));
       return;
     }
 
     if (password.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Password must be at least 6 characters.',
-          ),
+          content: Text('Password must be at least 6 characters.'),
         ),
       );
       return;
@@ -80,8 +65,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
-      final AuthResponse response =
-          await Supabase.instance.client.auth.signUp(
+      final AuthResponse response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
       );
@@ -91,9 +75,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (response.session != null) {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(
-            builder: (_) => const DashboardScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
           (_) => false,
         );
         return;
@@ -109,26 +91,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const LoginScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     } on AuthException catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Could not create your account. Please try again.',
-          ),
+          content: Text('Could not create your account. Please try again.'),
         ),
       );
     } finally {
@@ -158,10 +134,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const Text(
               'Create Account',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-              ),
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
             ),
 
             const SizedBox(height: 10),
@@ -169,10 +142,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const Text(
               'Create your MuscleUp account',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white60,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.white60),
             ),
 
             const SizedBox(height: 40),
@@ -181,12 +151,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
               decoration: const InputDecoration(
                 labelText: 'Email',
                 hintText: 'Enter your email',
-                prefixIcon: Icon(
-                  Icons.email_outlined,
-                ),
+                prefixIcon: Icon(Icons.email_outlined),
               ),
             ),
 
@@ -196,17 +165,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               controller: _passwordController,
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.newPassword],
               decoration: InputDecoration(
                 labelText: 'Password',
                 hintText: 'Create a password',
-                prefixIcon: const Icon(
-                  Icons.lock_outline,
-                ),
+                prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   onPressed: () {
                     setState(() {
-                      _obscurePassword =
-                          !_obscurePassword;
+                      _obscurePassword = !_obscurePassword;
                     });
                   },
                   icon: Icon(
@@ -224,6 +191,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               controller: _confirmPasswordController,
               obscureText: _obscureConfirmPassword,
               textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.newPassword],
               onSubmitted: (_) {
                 if (!_isLoading) {
                   _signUp();
@@ -232,14 +200,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: InputDecoration(
                 labelText: 'Confirm Password',
                 hintText: 'Enter your password again',
-                prefixIcon: const Icon(
-                  Icons.lock_outline,
-                ),
+                prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   onPressed: () {
                     setState(() {
-                      _obscureConfirmPassword =
-                          !_obscureConfirmPassword;
+                      _obscureConfirmPassword = !_obscureConfirmPassword;
                     });
                   },
                   icon: Icon(
@@ -256,23 +221,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
             SizedBox(
               height: 56,
               child: ElevatedButton(
-                onPressed:
-                    _isLoading ? null : _signUp,
+                onPressed: _isLoading ? null : _signUp,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      AppTheme.rolexGreen,
+                  backgroundColor: AppTheme.rolexGreen,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                 ),
                 child: _isLoading
                     ? const SizedBox(
                         width: 22,
                         height: 22,
-                        child:
-                            CircularProgressIndicator(
+                        child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.white,
                         ),
@@ -281,8 +242,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         'Create Account',
                         style: TextStyle(
                           fontSize: 18,
-                          fontWeight:
-                              FontWeight.w700,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
               ),
@@ -294,15 +254,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               onPressed: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const LoginScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
                 );
               },
-              child: const Text(
-                'Already have an account? Sign In',
-              ),
+              child: const Text('Already have an account? Sign In'),
             ),
           ],
         ),
